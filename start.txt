@@ -1,0 +1,1 @@
+Tesouro é um bot para o mensageiro Telegram capaz de gerenciar todos os seus pagamentos futuros. Para criar um novo pagamento, digite /newpayment.

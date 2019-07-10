@@ -3,7 +3,8 @@ import logging as log
 
 
 def start(bot, update):
-    bot.send_message(chat_id=update.message.chat_id, text="Olá, eu sou o Tesouro!")
+    text = open("start.txt", "r").read()
+    bot.send_message(chat_id=update.message.chat_id, text=text)
 
 def main():
     updater = tex.Updater(token=token)
