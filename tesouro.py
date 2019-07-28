@@ -19,7 +19,7 @@ def addPay(update: t.Update, context: tex.CallbackContext):
 
 def addDebt(update: t.Update, context: tex.CallbackContext):
     payer, payee, debtValue = context.args
-    debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': debtValue })
+    debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': debtValue, 'bound_payment': None })
 
     decision = [["Sim", "Não"]]
     reply_markup = t.ReplyKeyboardMarkup(decision, one_time_keyboard=True)
@@ -35,11 +35,18 @@ def bindPayment(update: t.Update, context: tex.CallbackContext):
         reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
 
         update.message.reply_text("Selecione um pagamento.", reply_markup=reply_markup)
-    return SECOND
+        return SECOND
+    else:
+        confirmDebt(update, context)
 
 def confirmDebt(update: t.Update, context: tex.CallbackContext):
     latest = debts[-1]
-    text = "A dívida de "+latest['payer']+" a "+latest['payee']+" de valor R$"+str(latest['value'])+" foi adicionada."
+    if update.message.text != "Não":
+        latest['bound_payment'] = update.message.text
+    text = "A dívida de "+latest['payer']+" a "+latest['payee']+" de valor R$"+str(latest['value'])+" foi adicionada"
+    if latest['bound_payment'] != None:
+        text += " e foi vinculada a "+latest['bound_payment']
+    text += "."
     update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
     return END
 
