@@ -3,6 +3,7 @@ import telegram.ext as tex
 import logging as log
 import uuid
 
+END, FIRST, SECOND = range(-1, 2)
 payments = []
 debts = []
 
@@ -19,8 +20,28 @@ def addPay(update: t.Update, context: tex.CallbackContext):
 def addDebt(update: t.Update, context: tex.CallbackContext):
     payer, payee, debtValue = context.args
     debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': debtValue })
-    text = "A dívida de "+payer+" a "+payee+" de valor R$"+str(debtValue)+" foi adicionada."
+
+    decision = [["Sim", "Não"]]
+    reply_markup = t.ReplyKeyboardMarkup(decision, one_time_keyboard=True)
+
+    update.message.reply_text("Vincular a um pagamento existente?", reply_markup=reply_markup)
+    return FIRST
+
+def bindPayment(update: t.Update, context: tex.CallbackContext):
+    if update.message.text == "Sim":
+        pay_keys = []
+        for p in payments:
+            pay_keys.append( [p['name']] )
+        reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
+
+        update.message.reply_text("Selecione um pagamento.", reply_markup=reply_markup)
+    return SECOND
+
+def confirmDebt(update: t.Update, context: tex.CallbackContext):
+    latest = debts[-1]
+    text = "A dívida de "+latest['payer']+" a "+latest['payee']+" de valor R$"+str(latest['value'])+" foi adicionada."
     update.message.reply_text(text)
+    return END
 
 def showAllPays(update: t.Update, context: tex.CallbackContext):
     out = ""
@@ -42,7 +63,15 @@ def main():
 
     dispatcher.add_handler(tex.CommandHandler('start', start))
     dispatcher.add_handler(tex.CommandHandler('add_pay', addPay))
-    dispatcher.add_handler(tex.CommandHandler('add_debt', addDebt))
+    debt_handler = tex.ConversationHandler(
+        entry_points=[tex.CommandHandler('add_debt', addDebt)],
+        states={
+            FIRST: [tex.MessageHandler(tex.Filters.text, bindPayment)],
+            SECOND: [tex.MessageHandler(tex.Filters.text, confirmDebt)]
+        },
+        fallbacks=[tex.CommandHandler('add_debt', addDebt)]
+    )
+    dispatcher.add_handler(debt_handler)
     dispatcher.add_handler(tex.CommandHandler('show_pays', showAllPays))
     dispatcher.add_handler(tex.CommandHandler('show_debts', showAllDebts))
 
