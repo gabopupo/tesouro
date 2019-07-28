@@ -40,7 +40,7 @@ def bindPayment(update: t.Update, context: tex.CallbackContext):
 def confirmDebt(update: t.Update, context: tex.CallbackContext):
     latest = debts[-1]
     text = "A dívida de "+latest['payer']+" a "+latest['payee']+" de valor R$"+str(latest['value'])+" foi adicionada."
-    update.message.reply_text(text)
+    update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
     return END
 
 def showAllPays(update: t.Update, context: tex.CallbackContext):
