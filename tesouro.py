@@ -13,10 +13,14 @@ def start(update: t.Update, context: tex.CallbackContext):
     text = open("start.txt", "r").read()
     update.message.reply_text(text)
 
+def toLower(s):
+    s = str(s)
+    return s.lower()
+
 # adiciona uma pessoa no orçamento
 def addPerson(update: t.Update, context: tex.CallbackContext):
     tHandle, alias = context.args
-    people.append({ 'id': uuid.uuid4(), 'handle': tHandle, 'alias': alias })
+    people.append({ 'id': uuid.uuid4(), 'handle': tHandle, 'alias': toLower(alias) })
     text = tHandle+" foi adicionado(a)."
     update.message.reply_text(text)
     
@@ -27,16 +31,25 @@ def addPay(update: t.Update, context: tex.CallbackContext):
     text = "O pagamento "+paymentName+" de valor R$"+str(paymentValue)+" foi adicionado."
     update.message.reply_text(text)
 
+def exists(person):
+    return (any(person == p['alias'] for p in people) or any(person == p['handle'] for p in people))
+
 # adiciona uma dívida
 def addDebt(update: t.Update, context: tex.CallbackContext):
     payer, payee, debtValue = context.args
-    debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': debtValue, 'bound_payment': None })
+    payer, payee = toLower(payer), toLower(payee)
+    if exists(payer) and exists(payee):
+        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': debtValue, 'bound_payment': None })
+    
+        decision = [["Sim", "Não"]]
+        reply_markup = t.ReplyKeyboardMarkup(decision, one_time_keyboard=True)
 
-    decision = [["Sim", "Não"]]
-    reply_markup = t.ReplyKeyboardMarkup(decision, one_time_keyboard=True)
-
-    update.message.reply_text("Vincular a um pagamento existente?", reply_markup=reply_markup)
-    return FIRST
+        update.message.reply_text("Vincular a um pagamento existente?", reply_markup=reply_markup)
+        return FIRST
+    else:
+        unknown = payee if exists(payer) else payer
+        text = "A dívida não foi adicionada porque "+ unknown +" não está registrado(a) no orçamento."
+        update.message.reply_text(text)
 
 # vincula uma dívida a um pagamento
 # COMPORTAMENTO: se uma pessoa X deve a Y, e ambos participam de um pagamento, vincular
@@ -87,6 +100,7 @@ def main():
     log.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=log.INFO)
 
     dispatcher.add_handler(tex.CommandHandler('start', start))
+    dispatcher.add_handler(tex.CommandHandler('newperson', addPerson))
     dispatcher.add_handler(tex.CommandHandler('newpayment', addPay))
     debt_handler = tex.ConversationHandler(
         entry_points=[tex.CommandHandler('newdebt', addDebt)],
