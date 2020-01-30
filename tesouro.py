@@ -4,19 +4,30 @@ import logging as log
 import uuid
 
 END, FIRST, SECOND = range(-1, 2)
+people = []
 payments = []
 debts = []
 
+# inicializa o bot
 def start(update: t.Update, context: tex.CallbackContext):
     text = open("start.txt", "r").read()
     update.message.reply_text(text)
 
+# adiciona uma pessoa no orçamento
+def addPerson(update: t.Update, context: tex.CallbackContext):
+    tHandle, alias = context.args
+    people.append({ 'id': uuid.uuid4(), 'handle': tHandle, 'alias': alias })
+    text = tHandle+" foi adicionado(a)."
+    update.message.reply_text(text)
+    
+# adiciona um pagamento
 def addPay(update: t.Update, context: tex.CallbackContext):
     paymentName, paymentValue = context.args
     payments.append({ 'id': uuid.uuid4(), 'name': paymentName, 'value': paymentValue })
     text = "O pagamento "+paymentName+" de valor R$"+str(paymentValue)+" foi adicionado."
     update.message.reply_text(text)
 
+# adiciona uma dívida
 def addDebt(update: t.Update, context: tex.CallbackContext):
     payer, payee, debtValue = context.args
     debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': debtValue, 'bound_payment': None })
@@ -27,6 +38,10 @@ def addDebt(update: t.Update, context: tex.CallbackContext):
     update.message.reply_text("Vincular a um pagamento existente?", reply_markup=reply_markup)
     return FIRST
 
+# vincula uma dívida a um pagamento
+# COMPORTAMENTO: se uma pessoa X deve a Y, e ambos participam de um pagamento, vincular
+# a dívida a ele faz X pagar a sua parte do pagamento E o que ele deve a Y, e Y paga sua
+# parte subtraída do que lhe era devido.
 def bindPayment(update: t.Update, context: tex.CallbackContext):
     if update.message.text == "Sim":
         pay_keys = []
@@ -39,6 +54,7 @@ def bindPayment(update: t.Update, context: tex.CallbackContext):
     else:
         confirmDebt(update, context)
 
+# Exibe uma mensagem de confirmação da criação de uma dívida
 def confirmDebt(update: t.Update, context: tex.CallbackContext):
     latest = debts[-1]
     if update.message.text != "Não":
@@ -50,12 +66,14 @@ def confirmDebt(update: t.Update, context: tex.CallbackContext):
     update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
     return END
 
+# Exibe todos os pagamentos atuais
 def showAllPays(update: t.Update, context: tex.CallbackContext):
     out = ""
     for i, p in enumerate(payments):
         out += str(i)+" "+p['name']+": "+p['value']+"\n"
     update.message.reply_text(out)
 
+# Exibe todas as dívidas atuais
 def showAllDebts(update: t.Update, context: tex.CallbackContext):
     out = ""
     for i, p in enumerate(debts):
@@ -69,18 +87,18 @@ def main():
     log.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=log.INFO)
 
     dispatcher.add_handler(tex.CommandHandler('start', start))
-    dispatcher.add_handler(tex.CommandHandler('add_pay', addPay))
+    dispatcher.add_handler(tex.CommandHandler('newpayment', addPay))
     debt_handler = tex.ConversationHandler(
-        entry_points=[tex.CommandHandler('add_debt', addDebt)],
+        entry_points=[tex.CommandHandler('newdebt', addDebt)],
         states={
             FIRST: [tex.MessageHandler(tex.Filters.text, bindPayment)],
             SECOND: [tex.MessageHandler(tex.Filters.text, confirmDebt)]
         },
-        fallbacks=[tex.CommandHandler('add_debt', addDebt)]
+        fallbacks=[tex.CommandHandler('newdebt', addDebt)]
     )
     dispatcher.add_handler(debt_handler)
-    dispatcher.add_handler(tex.CommandHandler('show_pays', showAllPays))
-    dispatcher.add_handler(tex.CommandHandler('show_debts', showAllDebts))
+    dispatcher.add_handler(tex.CommandHandler('showpayments', showAllPays))
+    dispatcher.add_handler(tex.CommandHandler('showdebts', showAllDebts))
 
     updater.start_polling()
     updater.idle()
