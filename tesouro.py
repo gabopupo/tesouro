@@ -1,3 +1,4 @@
+from decimal import getcontext, Decimal
 import telegram as t
 import telegram.ext as tex
 import logging as log
@@ -28,7 +29,7 @@ def addPerson(update: t.Update, context: tex.CallbackContext):
 def addPay(update: t.Update, context: tex.CallbackContext):
     paymentName, paymentValue = context.args[0:2]
     payers = [toLower(p) for p in context.args[2:]]
-    value = [float(paymentValue)/len(payers) for i in range(len(payers))]
+    value = [Decimal(paymentValue)/len(payers) for i in range(len(payers))]
     expenses = list(map(list, zip(payers, value)))
 
     payments.append({ 'id': uuid.uuid4(), 'name': paymentName, 'value': paymentValue, 'expenses': expenses })
@@ -45,7 +46,7 @@ def addDebt(update: t.Update, context: tex.CallbackContext):
     payer, payee, debtValue = context.args
     payer, payee = toLower(payer), toLower(payee)
     if exists(payer) and exists(payee):
-        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': float(debtValue), 'bound_payment': None })
+        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': Decimal(debtValue), 'bound_payment': None })
     
         decision = [["Sim", "Não"]]
         reply_markup = t.ReplyKeyboardMarkup(decision, one_time_keyboard=True)
@@ -134,6 +135,7 @@ def deleteDebt(update: t.Update, context: tex.CallbackContext):
     update.message.reply_text(text)
 
 def main():
+    getcontext().prec = 2
     updater = tex.Updater(token=token, use_context=True)
     dispatcher = updater.dispatcher
 
