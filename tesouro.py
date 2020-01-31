@@ -26,10 +26,16 @@ def addPerson(update: t.Update, context: tex.CallbackContext):
     
 # adiciona um pagamento
 def addPay(update: t.Update, context: tex.CallbackContext):
-    paymentName, paymentValue = context.args
-    payments.append({ 'id': uuid.uuid4(), 'name': paymentName, 'value': paymentValue })
+    paymentName, paymentValue = context.args[0:2]
+    payers = [toLower(p) for p in context.args[2:]]
+    value = [float(paymentValue)/len(payers) for i in range(len(payers))]
+    expenses = list(map(list, zip(payers, value)))
+
+    payments.append({ 'id': uuid.uuid4(), 'name': paymentName, 'value': paymentValue, 'expenses': expenses })
     text = "O pagamento "+paymentName+" de valor R$"+str(paymentValue)+" foi adicionado."
     update.message.reply_text(text)
+
+    print(expenses)
 
 def exists(person):
     return (any(person == p['alias'] for p in people) or any(person == p['handle'] for p in people))
@@ -39,7 +45,7 @@ def addDebt(update: t.Update, context: tex.CallbackContext):
     payer, payee, debtValue = context.args
     payer, payee = toLower(payer), toLower(payee)
     if exists(payer) and exists(payee):
-        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': debtValue, 'bound_payment': None })
+        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': float(debtValue), 'bound_payment': None })
     
         decision = [["Sim", "Não"]]
         reply_markup = t.ReplyKeyboardMarkup(decision, one_time_keyboard=True)
@@ -67,11 +73,20 @@ def bindPayment(update: t.Update, context: tex.CallbackContext):
     else:
         confirmDebt(update, context)
 
+def updateExpenses(debt):
+    where = next(i for i, p in enumerate(payments) if p['name'] == debt['bound_payment'])
+    expenses = payments[where]['expenses']
+    where = next(i for i, e in enumerate(expenses) if e[0] == debt['payer'])
+    expenses[where][1] += debt['value']
+    where = next(i for i, e in enumerate(expenses) if e[0] == debt['payee'])
+    expenses[where][1] -= debt['value']
+
 # Exibe uma mensagem de confirmação da criação de uma dívida
 def confirmDebt(update: t.Update, context: tex.CallbackContext):
     latest = debts[-1]
     if update.message.text != "Não":
         latest['bound_payment'] = update.message.text
+        updateExpenses(latest)
     text = "A dívida de "+latest['payer']+" a "+latest['payee']+" de valor R$"+str(latest['value'])+" foi adicionada"
     if latest['bound_payment'] != None:
         text += " e foi vinculada a "+latest['bound_payment']
@@ -84,6 +99,8 @@ def showAllPays(update: t.Update, context: tex.CallbackContext):
     out = ""
     for i, p in enumerate(payments):
         out += str(i)+" "+p['name']+": "+p['value']+"\n"
+        for e in enumerate(p['expenses']):
+            out += "\t\t\t"+str(e[1][0])+"\t\t"+str(e[1][1])+"\n"
     update.message.reply_text(out)
 
 # Exibe todas as dívidas atuais
