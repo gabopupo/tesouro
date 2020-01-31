@@ -52,10 +52,10 @@ def addPay(update: t.Update, context: tex.CallbackContext):
 
 # adiciona uma dívida
 def addDebt(update: t.Update, context: tex.CallbackContext):
-    payer, payee, debtValue = context.args
+    payer, payee, debtValue, description = context.args
     payer, payee = toLower(payer), toLower(payee)
     if exists(payer) and exists(payee):
-        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': Decimal(debtValue), 'bound_payment': None })
+        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': Decimal(debtValue), 'description': description, 'bound_payment': None })
     
         decision = [["Sim", "Não"]]
         reply_markup = t.ReplyKeyboardMarkup(decision, one_time_keyboard=True)
@@ -135,7 +135,7 @@ def showAllDebts(update: t.Update, context: tex.CallbackContext):
         out += "Não há dívidas registradas."
     else:
         for i, p in enumerate(debts):
-            out += p['payer']+" -> "+p['payee']+": "+str(p['value'])+"\n"
+            out += p['payer']+" -> "+p['payee']+": "+str(p['value'])+"\t("+p['description']+")\n"
     update.message.reply_text(out)
 
 def deletePay(update: t.Update, context: tex.CallbackContext):
