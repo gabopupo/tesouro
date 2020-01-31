@@ -109,8 +109,11 @@ def showAllPays(update: t.Update, context: tex.CallbackContext):
 # Exibe todas as dívidas atuais
 def showAllDebts(update: t.Update, context: tex.CallbackContext):
     out = ""
-    for i, p in enumerate(debts):
-        out += str(i)+" "+p['payer']+" -> "+p['payee']+": "+p['value']+"\n"
+    if len(debts) == 0:
+        out += "Não há dívidas registradas."
+    else:
+        for i, p in enumerate(debts):
+            out += str(i)+" "+p['payer']+" -> "+p['payee']+": "+str(p['value'])+"\n"
     update.message.reply_text(out)
 
 def deletePay(update: t.Update, context: tex.CallbackContext):
@@ -118,6 +121,12 @@ def deletePay(update: t.Update, context: tex.CallbackContext):
     where = next(i for i, p in enumerate(payments) if p['name'] == which)
     del payments[where]
     text = "O pagamento "+which+" foi removido."
+    update.message.reply_text(text)
+
+def deleteDebt(update: t.Update, context: tex.CallbackContext):
+    which = int(context.args[0])
+    text = "A dívida de "+debts[which]['payer']+" a "+debts[which]['payee']+" de valor R$"+str(debts[which]['value'])+" foi removida."
+    del debts[which]
     update.message.reply_text(text)
 
 def main():
@@ -141,6 +150,7 @@ def main():
     dispatcher.add_handler(tex.CommandHandler('showpayments', showAllPays))
     dispatcher.add_handler(tex.CommandHandler('showdebts', showAllDebts))
     dispatcher.add_handler(tex.CommandHandler('deletepayment', deletePay))
+    dispatcher.add_handler(tex.CommandHandler('deletedebt', deleteDebt))
 
     updater.start_polling()
     updater.idle()
