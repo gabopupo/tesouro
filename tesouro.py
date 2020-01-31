@@ -107,6 +107,15 @@ def confirmDebt(update: t.Update, context: tex.CallbackContext):
     update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
     return END
 
+def showAllPeople(update: t.Update, context: tex.CallbackContext):
+    out = ""
+    if len(people) == 0:
+        out += "Não há pessoas registradas."
+    else:
+        for i, p in enumerate(people):
+            out += p['handle']+" (ou "+p['alias']+")\n"
+    update.message.reply_text(out)
+
 # Exibe todos os pagamentos atuais
 def showAllPays(update: t.Update, context: tex.CallbackContext):
     out = ""
@@ -114,7 +123,7 @@ def showAllPays(update: t.Update, context: tex.CallbackContext):
         out += "Não há pagamentos registrados."
     else:
         for i, p in enumerate(payments):
-            out += str(i)+" "+p['name']+": "+p['value']+"\n"
+            out += p['name']+": "+p['value']+"\n"
             for e in enumerate(p['expenses']):
                 out += "\t\t\t"+str(e[1][0])+"\t\t"+str(e[1][1])+"\n"
     update.message.reply_text(out)
@@ -126,7 +135,7 @@ def showAllDebts(update: t.Update, context: tex.CallbackContext):
         out += "Não há dívidas registradas."
     else:
         for i, p in enumerate(debts):
-            out += str(i)+" "+p['payer']+" -> "+p['payee']+": "+str(p['value'])+"\n"
+            out += p['payer']+" -> "+p['payee']+": "+str(p['value'])+"\n"
     update.message.reply_text(out)
 
 def deletePay(update: t.Update, context: tex.CallbackContext):
@@ -162,6 +171,7 @@ def main():
         fallbacks=[tex.CommandHandler('newdebt', addDebt)]
     )
     dispatcher.add_handler(debt_handler)
+    dispatcher.add_handler(tex.CommandHandler('showpeople', showAllPeople))
     dispatcher.add_handler(tex.CommandHandler('showpayments', showAllPays))
     dispatcher.add_handler(tex.CommandHandler('showdebts', showAllDebts))
     dispatcher.add_handler(tex.CommandHandler('deletepayment', deletePay))
