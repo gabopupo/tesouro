@@ -97,10 +97,13 @@ def confirmDebt(update: t.Update, context: tex.CallbackContext):
 # Exibe todos os pagamentos atuais
 def showAllPays(update: t.Update, context: tex.CallbackContext):
     out = ""
-    for i, p in enumerate(payments):
-        out += str(i)+" "+p['name']+": "+p['value']+"\n"
-        for e in enumerate(p['expenses']):
-            out += "\t\t\t"+str(e[1][0])+"\t\t"+str(e[1][1])+"\n"
+    if len(payments) == 0:
+        out += "Não há pagamentos registrados."
+    else:
+        for i, p in enumerate(payments):
+            out += str(i)+" "+p['name']+": "+p['value']+"\n"
+            for e in enumerate(p['expenses']):
+                out += "\t\t\t"+str(e[1][0])+"\t\t"+str(e[1][1])+"\n"
     update.message.reply_text(out)
 
 # Exibe todas as dívidas atuais
@@ -109,6 +112,13 @@ def showAllDebts(update: t.Update, context: tex.CallbackContext):
     for i, p in enumerate(debts):
         out += str(i)+" "+p['payer']+" -> "+p['payee']+": "+p['value']+"\n"
     update.message.reply_text(out)
+
+def deletePay(update: t.Update, context: tex.CallbackContext):
+    which = context.args[0]
+    where = next(i for i, p in enumerate(payments) if p['name'] == which)
+    del payments[where]
+    text = "O pagamento "+which+" foi removido."
+    update.message.reply_text(text)
 
 def main():
     updater = tex.Updater(token=token, use_context=True)
@@ -130,6 +140,7 @@ def main():
     dispatcher.add_handler(debt_handler)
     dispatcher.add_handler(tex.CommandHandler('showpayments', showAllPays))
     dispatcher.add_handler(tex.CommandHandler('showdebts', showAllDebts))
+    dispatcher.add_handler(tex.CommandHandler('deletepayment', deletePay))
 
     updater.start_polling()
     updater.idle()
