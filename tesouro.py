@@ -25,21 +25,30 @@ def addPerson(update: t.Update, context: tex.CallbackContext):
     text = tHandle+" foi adicionado(a)."
     update.message.reply_text(text)
     
+def exists(person):
+    return (any(person == p['alias'] for p in people) or any(person == p['handle'] for p in people))
+
 # adiciona um pagamento
 def addPay(update: t.Update, context: tex.CallbackContext):
     paymentName, paymentValue = context.args[0:2]
     payers = [toLower(p) for p in context.args[2:]]
-    value = [Decimal(paymentValue)/len(payers) for i in range(len(payers))]
-    expenses = list(map(list, zip(payers, value)))
+    valid = True
+    unknown = ""
+    for p in payers:
+        if not exists(p):
+            valid = False
+            unknown = p
+            break
+    if valid:
+        value = [Decimal(paymentValue)/len(payers) for i in range(len(payers))]
+        expenses = list(map(list, zip(payers, value)))
 
-    payments.append({ 'id': uuid.uuid4(), 'name': paymentName, 'value': paymentValue, 'expenses': expenses })
-    text = "O pagamento "+paymentName+" de valor R$"+str(paymentValue)+" foi adicionado."
-    update.message.reply_text(text)
-
-    print(expenses)
-
-def exists(person):
-    return (any(person == p['alias'] for p in people) or any(person == p['handle'] for p in people))
+        payments.append({ 'id': uuid.uuid4(), 'name': paymentName, 'value': paymentValue, 'expenses': expenses })
+        text = "O pagamento "+paymentName+" de valor R$"+str(paymentValue)+" foi adicionado."
+        update.message.reply_text(text)
+    else:
+        text = "A dívida não foi adicionada porque "+ unknown +" não está registrado(a) no orçamento."
+        update.message.reply_text(text)
 
 # adiciona uma dívida
 def addDebt(update: t.Update, context: tex.CallbackContext):
