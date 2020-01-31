@@ -73,7 +73,10 @@ def bindPayment(update: t.Update, context: tex.CallbackContext):
     else:
         confirmDebt(update, context)
 
-def updateExpenses(debt):
+def updateExpenses(debt, reverse=False):
+    if reverse:
+        debt['value'] *= -1
+    
     where = next(i for i, p in enumerate(payments) if p['name'] == debt['bound_payment'])
     expenses = payments[where]['expenses']
     where = next(i for i, e in enumerate(expenses) if e[0] == debt['payer'])
@@ -126,6 +129,7 @@ def deletePay(update: t.Update, context: tex.CallbackContext):
 def deleteDebt(update: t.Update, context: tex.CallbackContext):
     which = int(context.args[0])
     text = "A dívida de "+debts[which]['payer']+" a "+debts[which]['payee']+" de valor R$"+str(debts[which]['value'])+" foi removida."
+    updateExpenses(debts[which], True)
     del debts[which]
     update.message.reply_text(text)
 
