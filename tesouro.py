@@ -5,9 +5,11 @@ import logging as log
 import uuid
 
 END, FIRST, SECOND = range(-1, 2)
+ADD, SUB = range(1, 3)
 people = []
 payments = []
 debts = []
+credits = []
 
 # inicializa o bot
 def start(update: t.Update, context: tex.CallbackContext):
@@ -89,8 +91,10 @@ def updateExpenses(debt, reverse=False):
     
     where = next(i for i, p in enumerate(payments) if p['name'] == debt['bound_payment'])
     expenses = payments[where]['expenses']
+    
     where = next(i for i, e in enumerate(expenses) if e[0] == debt['payer'])
     expenses[where][1] += debt['value']
+    
     where = next(i for i, e in enumerate(expenses) if e[0] == debt['payee'])
     expenses[where][1] -= debt['value']
 
@@ -106,6 +110,16 @@ def confirmDebt(update: t.Update, context: tex.CallbackContext):
     text += "."
     update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
     return END
+
+def addCredit(update: t.Update, context: tex.CallbackContext):
+    person, value = context.args
+    text = ""
+    if exists(person):
+        credits.append({ 'id': uuid.uuid4(), 'person': toLower(person), 'value': Decimal(value) })
+        text = "O crédito de "+person+" no valor de R$"+value+" foi registrado."
+    else:
+        text = "O crédito não foi adicionado porque "+ person +" não está registrado(a) no orçamento."
+    update.message.reply_text(text)
 
 def showAllPeople(update: t.Update, context: tex.CallbackContext):
     out = ""
@@ -134,15 +148,23 @@ def showAllDebts(update: t.Update, context: tex.CallbackContext):
     if len(debts) == 0:
         out += "Não há dívidas registradas."
     else:
-        for i, p in enumerate(debts):
-            out += p['payer']+" -> "+p['payee']+": "+str(p['value'])+"\t("+p['description']+")\n"
+        for i, d in enumerate(debts):
+            out += d['payer']+" -> "+d['payee']+": "+str(d['value'])+"\t("+d['description']+")\n"
+    update.message.reply_text(out)
+
+def showAllCredits(update: t.Update, context: tex.CallbackContext):
+    out = ""
+    if len(credits) == 0:
+        out += "Não há créditos registrados."
+    else:
+        for i, c in enumerate(credits):
+            out += c['person']+"\t\t-"+str(c['value'])
     update.message.reply_text(out)
 
 def deletePay(update: t.Update, context: tex.CallbackContext):
-    which = context.args[0]
-    where = next(i for i, p in enumerate(payments) if p['name'] == which)
-    del payments[where]
-    text = "O pagamento "+which+" foi removido."
+    which = int(context.args[0])
+    text = "O pagamento "+payments[which]['name']+" foi removido."
+    del payments[which]
     update.message.reply_text(text)
 
 def deleteDebt(update: t.Update, context: tex.CallbackContext):
@@ -150,6 +172,12 @@ def deleteDebt(update: t.Update, context: tex.CallbackContext):
     text = "A dívida de "+debts[which]['payer']+" a "+debts[which]['payee']+" de valor R$"+str(debts[which]['value'])+" foi removida."
     updateExpenses(debts[which], True)
     del debts[which]
+    update.message.reply_text(text)
+
+def deleteCredit(update: t.Update, context: tex.CallbackContext):
+    which = int(context.args[0])
+    text = "O crédito de "+credits[which]['person']+" no valor R$"+str(credits[which]['value'])+" foi removido."
+    del credits[which]
     update.message.reply_text(text)
 
 def main():
@@ -171,11 +199,14 @@ def main():
         fallbacks=[tex.CommandHandler('newdebt', addDebt)]
     )
     dispatcher.add_handler(debt_handler)
+    dispatcher.add_handler(tex.CommandHandler('newcredit', addCredit))
     dispatcher.add_handler(tex.CommandHandler('showpeople', showAllPeople))
     dispatcher.add_handler(tex.CommandHandler('showpayments', showAllPays))
     dispatcher.add_handler(tex.CommandHandler('showdebts', showAllDebts))
+    dispatcher.add_handler(tex.CommandHandler('showcredits', showAllCredits))
     dispatcher.add_handler(tex.CommandHandler('deletepayment', deletePay))
     dispatcher.add_handler(tex.CommandHandler('deletedebt', deleteDebt))
+    dispatcher.add_handler(tex.CommandHandler('deletecredit', deleteCredit))
 
     updater.start_polling()
     updater.idle()
