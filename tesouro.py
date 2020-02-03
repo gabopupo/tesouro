@@ -2,7 +2,6 @@ from decimal import getcontext, Decimal
 import re
 import telegram as t
 import telegram.ext as tex
-import logging as log
 import uuid
 
 ADD, SUB = range(1, 3)
@@ -210,8 +209,6 @@ def main():
     getcontext().prec = 2
     updater = tex.Updater(token=token, use_context=True)
     dispatcher = updater.dispatcher
-
-    log.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=log.INFO)
 
     dispatcher.add_handler(tex.CommandHandler('start', start))
     dispatcher.add_handler(tex.CommandHandler('newperson', addPerson))
