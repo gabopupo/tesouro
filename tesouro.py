@@ -1,10 +1,10 @@
 from decimal import getcontext, Decimal
+import re
 import telegram as t
 import telegram.ext as tex
 import logging as log
 import uuid
 
-END, FIRST, SECOND = range(-1, 2)
 ADD, SUB = range(1, 3)
 people = []
 payments = []
@@ -57,39 +57,31 @@ def addDebt(update: t.Update, context: tex.CallbackContext):
     payer, payee, debtValue, description = context.args
     payer, payee = toLower(payer), toLower(payee)
     if exists(payer) and exists(payee):
-        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': Decimal(debtValue), 'description': description, 'bound_payment': None })
+        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': Decimal(debtValue), 'description': description, 'bound': None })
     
-        decision = [["Sim", "Não"]]
-        reply_markup = t.ReplyKeyboardMarkup(decision, one_time_keyboard=True)
+        # vincula uma dívida a um pagamento
+        # COMPORTAMENTO: se uma pessoa X deve a Y, e ambos participam de um pagamento, vincular
+        # a dívida a ele faz X pagar a sua parte do pagamento E o que ele deve a Y, e Y paga sua
+        # parte subtraída do que lhe era devido.
 
-        update.message.reply_text("Vincular a um pagamento existente?", reply_markup=reply_markup)
-        return FIRST
-    else:
-        unknown = payee if exists(payer) else payer
-        text = "A dívida não foi adicionada porque "+ unknown +" não está registrado(a) no orçamento."
-        update.message.reply_text(text)
-
-# vincula uma dívida a um pagamento
-# COMPORTAMENTO: se uma pessoa X deve a Y, e ambos participam de um pagamento, vincular
-# a dívida a ele faz X pagar a sua parte do pagamento E o que ele deve a Y, e Y paga sua
-# parte subtraída do que lhe era devido.
-def bindPayment(update: t.Update, context: tex.CallbackContext):
-    if update.message.text == "Sim":
         pay_keys = []
+        pay_keys.append( ["(não vincular)"] )
         for p in payments:
             pay_keys.append( [p['name']] )
         reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
 
         update.message.reply_text("Selecione um pagamento.", reply_markup=reply_markup)
-        return SECOND
+        return 1
     else:
-        confirmDebt(update, context)
+        unknown = payee if exists(payer) else payer
+        text = "A dívida não foi adicionada porque "+ unknown +" não está registrado(a) no orçamento."
+        update.message.reply_text(text)
 
 def updateExpenses(debt, reverse=False):
     if reverse:
         debt['value'] *= -1
     
-    where = next(i for i, p in enumerate(payments) if p['name'] == debt['bound_payment'])
+    where = next(i for i, p in enumerate(payments) if p['name'] == debt['bound'])
     expenses = payments[where]['expenses']
     
     where = next(i for i, e in enumerate(expenses) if e[0] == debt['payer'])
@@ -101,21 +93,21 @@ def updateExpenses(debt, reverse=False):
 # Exibe uma mensagem de confirmação da criação de uma dívida
 def confirmDebt(update: t.Update, context: tex.CallbackContext):
     latest = debts[-1]
-    if update.message.text != "Não":
-        latest['bound_payment'] = update.message.text
+    if update.message.text != "(não vincular)":
+        latest['bound'] = update.message.text
         updateExpenses(latest)
     text = "A dívida de "+latest['payer']+" a "+latest['payee']+" de valor R$"+str(latest['value'])+" foi adicionada"
-    if latest['bound_payment'] != None:
-        text += " e foi vinculada a "+latest['bound_payment']
+    if latest['bound'] != None:
+        text += " e foi vinculada a "+latest['bound']
     text += "."
     update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
-    return END
+    return tex.ConversationHandler.END
 
 def addCredit(update: t.Update, context: tex.CallbackContext):
-    person, value = context.args
+    person, value, description = context.args
     text = ""
     if exists(person):
-        credits.append({ 'id': uuid.uuid4(), 'person': toLower(person), 'value': Decimal(value) })
+        credits.append({ 'id': uuid.uuid4(), 'person': toLower(person), 'value': Decimal(value), 'description': description })
         text = "O crédito de "+person+" no valor de R$"+value+" foi registrado."
     else:
         text = "O crédito não foi adicionado porque "+ person +" não está registrado(a) no orçamento."
@@ -161,24 +153,58 @@ def showAllCredits(update: t.Update, context: tex.CallbackContext):
             out += c['person']+"\t\t-"+str(c['value'])
     update.message.reply_text(out)
 
+def deletePay_selector(update: t.Update, context: tex.CallbackContext):
+    pay_keys = []
+    for i, p in enumerate(payments):
+        pay_keys.append( [str(i)+": "+p['name']] )
+    reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
+
+    update.message.reply_text("Selecione um pagamento.", reply_markup=reply_markup)
+
+    return 2
+
 def deletePay(update: t.Update, context: tex.CallbackContext):
-    which = int(context.args[0])
-    text = "O pagamento "+payments[which]['name']+" foi removido."
-    del payments[which]
+    where = int(re.match(".+?(?=:)", update.message.text)[0])
+    text = "O pagamento "+payments[where]['name']+" foi removido."
+    del payments[where]
     update.message.reply_text(text)
+    return tex.ConversationHandler.END
+
+def deleteDebt_selector(update: t.Update, context: tex.CallbackContext):
+    debt_keys = []
+    for i, d in enumerate(debts):
+        debt_keys.append( [str(i)+": "+d['description']] )
+    reply_markup = t.ReplyKeyboardMarkup(debt_keys, one_time_keyboard=True)
+
+    update.message.reply_text("Selecione uma dívida.", reply_markup=reply_markup)
+    
+    return 3
 
 def deleteDebt(update: t.Update, context: tex.CallbackContext):
-    which = int(context.args[0])
-    text = "A dívida de "+debts[which]['payer']+" a "+debts[which]['payee']+" de valor R$"+str(debts[which]['value'])+" foi removida."
-    updateExpenses(debts[which], True)
-    del debts[which]
+    where = int(re.match(".+?(?=:)", update.message.text)[0])
+    text = "A dívida de "+debts[where]['payer']+" a "+debts[where]['payee']+" de valor R$"+str(debts[where]['value'])+" foi removida."
+    if debts[where]['bound'] != None:
+        updateExpenses(debts[where], True)
+    del debts[where]
     update.message.reply_text(text)
+    return tex.ConversationHandler.END
+
+def deleteCredit_selector(update: t.Update, context: tex.CallbackContext):
+    credit_keys = []
+    for i, c in enumerate(credits):
+        credit_keys.append( [str(i)+": "+c['description']] )
+    reply_markup = t.ReplyKeyboardMarkup(credit_keys, one_time_keyboard=True)
+
+    update.message.reply_text("Selecione um crédito.", reply_markup=reply_markup)
+    
+    return 4
 
 def deleteCredit(update: t.Update, context: tex.CallbackContext):
-    which = int(context.args[0])
+    which = int(re.match(".+?(?=:)", update.message.text)[0])
     text = "O crédito de "+credits[which]['person']+" no valor R$"+str(credits[which]['value'])+" foi removido."
     del credits[which]
     update.message.reply_text(text)
+    return tex.ConversationHandler.END
 
 def main():
     getcontext().prec = 2
@@ -193,8 +219,7 @@ def main():
     debt_handler = tex.ConversationHandler(
         entry_points=[tex.CommandHandler('newdebt', addDebt)],
         states={
-            FIRST: [tex.MessageHandler(tex.Filters.text, bindPayment)],
-            SECOND: [tex.MessageHandler(tex.Filters.text, confirmDebt)]
+            1: [tex.MessageHandler(tex.Filters.text, confirmDebt)]
         },
         fallbacks=[tex.CommandHandler('newdebt', addDebt)]
     )
@@ -204,9 +229,32 @@ def main():
     dispatcher.add_handler(tex.CommandHandler('showpayments', showAllPays))
     dispatcher.add_handler(tex.CommandHandler('showdebts', showAllDebts))
     dispatcher.add_handler(tex.CommandHandler('showcredits', showAllCredits))
-    dispatcher.add_handler(tex.CommandHandler('deletepayment', deletePay))
-    dispatcher.add_handler(tex.CommandHandler('deletedebt', deleteDebt))
-    dispatcher.add_handler(tex.CommandHandler('deletecredit', deleteCredit))
+    delete_pay_handler = tex.ConversationHandler(
+        entry_points=[tex.CommandHandler('deletepayment', deletePay_selector)],
+        states={
+            2: [tex.MessageHandler(tex.Filters.text, deletePay)]
+        },
+        fallbacks=[tex.CommandHandler('deletepayment', deletePay_selector)]
+    )
+    dispatcher.add_handler(delete_pay_handler)
+
+    delete_debt_handler = tex.ConversationHandler(
+        entry_points=[tex.CommandHandler('deletedebt', deleteDebt_selector)],
+        states={
+            3: [tex.MessageHandler(tex.Filters.text, deleteDebt)]
+        },
+        fallbacks=[tex.CommandHandler('deleteDebt', deleteDebt_selector)]
+    )
+    dispatcher.add_handler(delete_debt_handler)
+
+    delete_credit_handler = tex.ConversationHandler(
+        entry_points=[tex.CommandHandler('deletecredit', deleteCredit_selector)],
+        states={
+            4: [tex.MessageHandler(tex.Filters.text, deleteCredit)]
+        },
+        fallbacks=[tex.CommandHandler('deleteDebt', deleteCredit_selector)]
+    )
+    dispatcher.add_handler(delete_credit_handler)
 
     updater.start_polling()
     updater.idle()
