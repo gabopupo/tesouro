@@ -165,6 +165,7 @@ def addCredit_3(update: t.Update, context: tex.CallbackContext):
     else:
         text = "O crédito não foi adicionado porque "+ context.user_data['person'] +" não está registrado(a) no orçamento."
     update.message.reply_text(text)
+    return tex.ConversationHandler.END
 
 def showAllPeople(update: t.Update, context: tex.CallbackContext):
     out = ""
@@ -203,7 +204,7 @@ def showAllCredits(update: t.Update, context: tex.CallbackContext):
         out += "Não há créditos registrados."
     else:
         for i, c in enumerate(credits):
-            out += c['person']+"\t\t-"+str(c['value'])
+            out += c['person']+"\t\t-"+str(c['value'])+" ("+c['description']+")\n"
     update.message.reply_text(out)
 
 def deletePay_selector(update: t.Update, context: tex.CallbackContext):
@@ -248,12 +249,12 @@ def deleteDebt(update: t.Update, context: tex.CallbackContext):
 def deleteCredit_selector(update: t.Update, context: tex.CallbackContext):
     credit_keys = []
     for i, c in enumerate(credits):
-        credit_keys.append( [str(i)+": "+c['description']] )
+        credit_keys.append( [str(i)+": crédito de "+c['person']+" no valor "+str(c['value'])] )
     reply_markup = t.ReplyKeyboardMarkup(credit_keys, one_time_keyboard=True)
 
     update.message.reply_text("Selecione um crédito.", reply_markup=reply_markup)
     
-    return 4
+    return 1
 
 def deleteCredit(update: t.Update, context: tex.CallbackContext):
     which = int(re.match(".+?(?=:)", update.message.text)[0])
@@ -332,16 +333,16 @@ def main():
         states={
             3: [tex.MessageHandler(tex.Filters.text, deleteDebt)]
         },
-        fallbacks=[tex.CommandHandler('deleteDebt', deleteDebt_selector)]
+        fallbacks=[tex.CommandHandler('deletecredit', deleteDebt_selector)]
     )
     dispatcher.add_handler(delete_debt_handler)
 
     delete_credit_handler = tex.ConversationHandler(
         entry_points=[tex.CommandHandler('deletecredit', deleteCredit_selector)],
         states={
-            4: [tex.MessageHandler(tex.Filters.text, deleteCredit)]
+            1: [tex.MessageHandler(tex.Filters.text, deleteCredit)]
         },
-        fallbacks=[tex.CommandHandler('deleteDebt', deleteCredit_selector)]
+        fallbacks=[tex.CommandHandler('deletecredit', deleteCredit_selector)]
     )
     dispatcher.add_handler(delete_credit_handler)
 
