@@ -2,6 +2,7 @@ from decimal import getcontext, Decimal
 import re
 import telegram as t
 import telegram.ext as tex
+import logging as log
 import uuid
 
 ADD, SUB = range(1, 3)
@@ -81,22 +82,35 @@ def addDebt(update: t.Update, context: tex.CallbackContext):
 
 def addDebt_1(update: t.Update, context: tex.CallbackContext):
     context.user_data['payer'] = update.message.text
-    update.message.reply_text("Entre com o nome do credor.")
+    decision = [["0: Adicionar credor"], ["1: Compensar em um pagamento"]]
+    reply_markup = t.ReplyKeyboardMarkup(decision, one_time_keyboard=True)
+    update.message.reply_text("O que deseja fazer?", reply_markup=reply_markup)
     return 2
 
 def addDebt_2(update: t.Update, context: tex.CallbackContext):
-    context.user_data['payee'] = update.message.text
-    update.message.reply_text("Entre com o valor devido.")
-    return 3
+    decision = int(re.match(".+?(?=:)", update.message.text)[0])
+    
+    if decision == 0:
+        update.message.reply_text("Entre com o nome do credor.")
+        return 3
+    elif decision == 1:
+        context.user_data['payee'] = None
+        update.message.reply_text("Entre com o valor devido.")
+        return 4
 
 def addDebt_3(update: t.Update, context: tex.CallbackContext):
-    context.user_data['value'] = update.message.text
-    update.message.reply_text("Entre com uma descrição da dívida. (ex: Pedágio)")
+    context.user_data['payee'] = update.message.text
+    update.message.reply_text("Entre com o valor devido.")
     return 4
 
 def addDebt_4(update: t.Update, context: tex.CallbackContext):
-    payer, payee = toLower(context.user_data['payer']), toLower(context.user_data['payee'])
-    if exists(payer) and exists(payee):
+    context.user_data['value'] = update.message.text
+    update.message.reply_text("Entre com uma descrição da dívida. (ex: Pedágio)")
+    return 5
+
+def addDebt_5(update: t.Update, context: tex.CallbackContext):
+    payer, payee = toLower(context.user_data['payer']), toLower(context.user_data['payee']) if context.user_data['payee'] != None else None
+    if exists(payer) and (exists(payee) or payee == None):
         debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': Decimal(context.user_data['value']), 'description': update.message.text, 'bound': None })
     
         # vincula uma dívida a um pagamento
@@ -111,7 +125,7 @@ def addDebt_4(update: t.Update, context: tex.CallbackContext):
         reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
 
         update.message.reply_text("Selecione um pagamento para vincular à dívida.", reply_markup=reply_markup)
-        return 5
+        return 6
     else:
         unknown = payee if exists(payer) else payer
         text = "A dívida não foi adicionada porque "+ unknown +" não está registrado(a) no orçamento."
@@ -127,8 +141,9 @@ def updateExpenses(debt, reverse=False):
     where = next(i for i, e in enumerate(expenses) if e[0] == debt['payer'])
     expenses[where][1] += debt['value']
     
-    where = next(i for i, e in enumerate(expenses) if e[0] == debt['payee'])
-    expenses[where][1] -= debt['value']
+    if debt['payee'] != None:
+        where = next(i for i, e in enumerate(expenses) if e[0] == debt['payee'])
+        expenses[where][1] -= debt['value']
 
 # Exibe uma mensagem de confirmação da criação de uma dívida
 def confirmDebt(update: t.Update, context: tex.CallbackContext):
@@ -136,7 +151,10 @@ def confirmDebt(update: t.Update, context: tex.CallbackContext):
     if update.message.text != "(não vincular)":
         latest['bound'] = update.message.text
         updateExpenses(latest)
-    text = "A dívida de "+latest['payer']+" a "+latest['payee']+" de valor R$"+str(latest['value'])+" foi adicionada"
+    text = "A dívida de "+latest['payer']
+    if latest['payee'] != None:
+        text += " a "+latest['payee']
+    text += " de valor R$"+str(latest['value'])+" foi adicionada"
     if latest['bound'] != None:
         text += " e foi vinculada a "+latest['bound']
     text += "."
@@ -223,7 +241,10 @@ def showAllDebts(update: t.Update, context: tex.CallbackContext):
         out += "Não há dívidas registradas."
     else:
         for i, d in enumerate(debts):
-            out += d['payer']+" -> "+d['payee']+": "+str(d['value'])+"\t("+d['description']+")\n"
+            out += d['payer']
+            if d['payee'] != None:
+                out += " -> "+d['payee']
+            out += ": "+str(d['value'])+"\t("+d['description']+")\n"
     update.message.reply_text(out)
 
 def showAllCredits(update: t.Update, context: tex.CallbackContext):
@@ -270,7 +291,10 @@ def deleteDebt_selector(update: t.Update, context: tex.CallbackContext):
 
 def deleteDebt(update: t.Update, context: tex.CallbackContext):
     where = int(re.match(".+?(?=:)", update.message.text)[0])
-    text = "A dívida de "+debts[where]['payer']+" a "+debts[where]['payee']+" de valor R$"+str(debts[where]['value'])+" foi removida."
+    text = "A dívida de "+debts[where]['payer']
+    if debts[where]['payee'] != None:
+        text += " a "+debts[where]['payee']
+    text += " de valor R$"+str(debts[where]['value'])+" foi removida."
     if debts[where]['bound'] != None:
         updateExpenses(debts[where], True)
     del debts[where]
@@ -300,6 +324,7 @@ def main():
     getcontext().prec = 2
     updater = tex.Updater(token=token, use_context=True)
     dispatcher = updater.dispatcher
+    log.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=log.INFO)
 
     dispatcher.add_handler(tex.CommandHandler('start', start))
 
@@ -331,7 +356,8 @@ def main():
             2: [tex.MessageHandler(tex.Filters.text, addDebt_2)],
             3: [tex.MessageHandler(tex.Filters.text, addDebt_3)],
             4: [tex.MessageHandler(tex.Filters.text, addDebt_4)],
-            5: [tex.MessageHandler(tex.Filters.text, confirmDebt)]
+            5: [tex.MessageHandler(tex.Filters.text, addDebt_5)],
+            6: [tex.MessageHandler(tex.Filters.text, confirmDebt)]
         },
         fallbacks=[tex.CommandHandler('newdebt', addDebt)]
     )
