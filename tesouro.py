@@ -110,7 +110,7 @@ def addDebt_4(update: t.Update, context: tex.CallbackContext):
             pay_keys.append( [p['name']] )
         reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
 
-        update.message.reply_text("Selecione um pagamento.", reply_markup=reply_markup)
+        update.message.reply_text("Selecione um pagamento para vincular à dívida.", reply_markup=reply_markup)
         return 5
     else:
         unknown = payee if exists(payer) else payer
@@ -218,7 +218,10 @@ def deletePay_selector(update: t.Update, context: tex.CallbackContext):
 
 def deletePay(update: t.Update, context: tex.CallbackContext):
     where = int(re.match(".+?(?=:)", update.message.text)[0])
-    text = "O pagamento "+payments[where]['name']+" foi removido."
+    for i, d in enumerate(debts):
+        if d['bound'] == payments[where]['name']:
+            del debts[i]
+    text = "O pagamento "+payments[where]['name']+" foi removido, assim como todas as suas dívidas vinculadas."
     del payments[where]
     update.message.reply_text(text)
     return tex.ConversationHandler.END
