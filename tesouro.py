@@ -278,6 +278,30 @@ def showAllCredits(update: t.Update, context: tex.CallbackContext):
             out += c['person']+"\t\t-"+str(c['value'])+" ("+c['description']+")\n"
     update.message.reply_text(out)
 
+def showReport(update: t.Update, context: tex.CallbackContext):
+    out = ""
+    costs = [0] * len(people)
+
+    for i, p in enumerate(people):
+        for _, a in enumerate(payments):
+            for _, e in enumerate(a['expenses']):                
+                if e[0] == p['alias']:
+                    costs[i] += e[1]
+        print("(após pays) valor de costs["+str(i)+"] = "+str(costs[i]))
+        for _, d in enumerate(debts):
+            if d['bound'] == None:
+                if p['alias'] in d['payer']:
+                    costs[i] += d['value']/len(d['payer'])
+        print("(após debts) valor de costs["+str(i)+"] = "+str(costs[i]))
+        for _, c in enumerate(credits):
+            if c['bound'] == None:
+                if p['alias'] == c['person']:
+                    costs[i] -= c['value']
+        print("(após creds) valor de costs["+str(i)+"] = "+str(costs[i]))
+        out += people[i]['handle']+": "+str(costs[i])+"\n"
+    update.message.reply_text(out)
+    
+
 def deletePay_selector(update: t.Update, context: tex.CallbackContext):
     pay_keys = []
     for i, p in enumerate(payments):
@@ -407,6 +431,7 @@ def main():
     dispatcher.add_handler(tex.CommandHandler('showpayments', showAllPays))
     dispatcher.add_handler(tex.CommandHandler('showdebts', showAllDebts))
     dispatcher.add_handler(tex.CommandHandler('showcredits', showAllCredits))
+    dispatcher.add_handler(tex.CommandHandler('showreport', showReport))
     delete_pay_handler = tex.ConversationHandler(
         entry_points=[tex.CommandHandler('deletepayment', deletePay_selector)],
         states={
