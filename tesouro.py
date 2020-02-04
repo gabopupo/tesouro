@@ -76,10 +76,28 @@ def addPay_3(update: t.Update, context: tex.CallbackContext):
 
 # adiciona uma dívida
 def addDebt(update: t.Update, context: tex.CallbackContext):
-    payer, payee, debtValue, description = context.args
-    payer, payee = toLower(payer), toLower(payee)
+    update.message.reply_text("Você está adicionando uma nova dívida. Entre com o nome do devedor.")
+    return 1
+
+def addDebt_1(update: t.Update, context: tex.CallbackContext):
+    context.user_data['payer'] = update.message.text
+    update.message.reply_text("Entre com o nome do credor.")
+    return 2
+
+def addDebt_2(update: t.Update, context: tex.CallbackContext):
+    context.user_data['payee'] = update.message.text
+    update.message.reply_text("Entre com o valor devido.")
+    return 3
+
+def addDebt_3(update: t.Update, context: tex.CallbackContext):
+    context.user_data['value'] = update.message.text
+    update.message.reply_text("Entre com uma descrição da dívida. (ex: Pedágio)")
+    return 4
+
+def addDebt_4(update: t.Update, context: tex.CallbackContext):
+    payer, payee = toLower(context.user_data['payer']), toLower(context.user_data['payee'])
     if exists(payer) and exists(payee):
-        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': Decimal(debtValue), 'description': description, 'bound': None })
+        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': Decimal(context.user_data['value']), 'description': update.message.text, 'bound': None })
     
         # vincula uma dívida a um pagamento
         # COMPORTAMENTO: se uma pessoa X deve a Y, e ambos participam de um pagamento, vincular
@@ -93,7 +111,7 @@ def addDebt(update: t.Update, context: tex.CallbackContext):
         reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
 
         update.message.reply_text("Selecione um pagamento.", reply_markup=reply_markup)
-        return 1
+        return 5
     else:
         unknown = payee if exists(payer) else payer
         text = "A dívida não foi adicionada porque "+ unknown +" não está registrado(a) no orçamento."
@@ -272,7 +290,11 @@ def main():
     debt_handler = tex.ConversationHandler(
         entry_points=[tex.CommandHandler('newdebt', addDebt)],
         states={
-            1: [tex.MessageHandler(tex.Filters.text, confirmDebt)]
+            1: [tex.MessageHandler(tex.Filters.text, addDebt_1)],
+            2: [tex.MessageHandler(tex.Filters.text, addDebt_2)],
+            3: [tex.MessageHandler(tex.Filters.text, addDebt_3)],
+            4: [tex.MessageHandler(tex.Filters.text, addDebt_4)],
+            5: [tex.MessageHandler(tex.Filters.text, confirmDebt)]
         },
         fallbacks=[tex.CommandHandler('newdebt', addDebt)]
     )
