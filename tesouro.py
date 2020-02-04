@@ -287,17 +287,17 @@ def showReport(update: t.Update, context: tex.CallbackContext):
             for _, e in enumerate(a['expenses']):                
                 if e[0] == p['alias']:
                     costs[i] += e[1]
-        print("(após pays) valor de costs["+str(i)+"] = "+str(costs[i]))
+        
         for _, d in enumerate(debts):
             if d['bound'] == None:
                 if p['alias'] in d['payer']:
                     costs[i] += d['value']/len(d['payer'])
-        print("(após debts) valor de costs["+str(i)+"] = "+str(costs[i]))
+        
         for _, c in enumerate(credits):
             if c['bound'] == None:
                 if p['alias'] == c['person']:
                     costs[i] -= c['value']
-        print("(após creds) valor de costs["+str(i)+"] = "+str(costs[i]))
+        
         out += people[i]['handle']+": "+str(costs[i])+"\n"
     update.message.reply_text(out)
     
