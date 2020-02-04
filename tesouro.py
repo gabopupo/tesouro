@@ -21,18 +21,40 @@ def toLower(s):
 
 # adiciona uma pessoa no orçamento
 def addPerson(update: t.Update, context: tex.CallbackContext):
-    tHandle, alias = context.args
-    people.append({ 'id': uuid.uuid4(), 'handle': tHandle, 'alias': toLower(alias) })
-    text = tHandle+" foi adicionado(a)."
+    update.message.reply_text("Você está adicionando uma nova pessoa. Entre com o seu nome de usuário. (ex: @gpupo)")
+    return 1
+
+def addPerson_1(update: t.Update, context: tex.CallbackContext):
+    context.user_data['handle'] = update.message.text
+    update.message.reply_text("Entre com um apelido dessa pessoa, que seja curto e fácil de lembrar. (ex: Pupo)")
+    return 2
+
+def addPerson_2(update: t.Update, context: tex.CallbackContext):
+    people.append({ 'id': uuid.uuid4(), 'handle': context.user_data['handle'], 'alias': toLower(update.message.text) })
+    text = context.user_data['handle']+" foi adicionado(a)."
     update.message.reply_text(text)
+    return tex.ConversationHandler.END
     
 def exists(person):
     return (any(person == p['alias'] for p in people) or any(person == p['handle'] for p in people))
 
 # adiciona um pagamento
 def addPay(update: t.Update, context: tex.CallbackContext):
-    paymentName, paymentValue = context.args[0:2]
-    payers = [toLower(p) for p in context.args[2:]]
+    update.message.reply_text("Você está adicionando um novo pagamento. Entre com o nome do pagamento. (ex: Aluguel)")
+    return 1
+
+def addPay_1(update: t.Update, context: tex.CallbackContext):
+    context.user_data['name'] = update.message.text
+    update.message.reply_text("Entre com o valor do pagamento.")
+    return 2
+
+def addPay_2(update: t.Update, context: tex.CallbackContext):
+    context.user_data['value'] = update.message.text
+    update.message.reply_text("Entre com as pessoas pagantes, separadas por vírgula.")
+    return 3
+
+def addPay_3(update: t.Update, context: tex.CallbackContext):
+    payers = [toLower(person.strip()) for person in update.message.text.split(',')]
     valid = True
     unknown = ""
     for p in payers:
@@ -41,15 +63,16 @@ def addPay(update: t.Update, context: tex.CallbackContext):
             unknown = p
             break
     if valid:
-        value = [Decimal(paymentValue)/len(payers) for i in range(len(payers))]
+        value = [Decimal(context.user_data['value'])/len(payers) for i in range(len(payers))]
         expenses = list(map(list, zip(payers, value)))
 
-        payments.append({ 'id': uuid.uuid4(), 'name': paymentName, 'value': paymentValue, 'expenses': expenses })
-        text = "O pagamento "+paymentName+" de valor R$"+str(paymentValue)+" foi adicionado."
+        payments.append( { 'id': uuid.uuid4(), 'name': context.user_data['name'], 'value': context.user_data['value'], 'expenses': expenses })
+        text = "O pagamento "+context.user_data['name']+" de valor R$"+str(context.user_data['value'])+" foi adicionado."
         update.message.reply_text(text)
     else:
         text = "A dívida não foi adicionada porque "+ unknown +" não está registrado(a) no orçamento."
         update.message.reply_text(text)
+    return tex.ConversationHandler.END
 
 # adiciona uma dívida
 def addDebt(update: t.Update, context: tex.CallbackContext):
@@ -103,13 +126,26 @@ def confirmDebt(update: t.Update, context: tex.CallbackContext):
     return tex.ConversationHandler.END
 
 def addCredit(update: t.Update, context: tex.CallbackContext):
-    person, value, description = context.args
+    update.message.reply_text("Você está adicionando um novo crédito. Entre com o nome da pessoa a recebê-la.")
+    return 1
+
+def addCredit_1(update: t.Update, context: tex.CallbackContext):
+    context.user_data['person'] = update.message.text
+    update.message.reply_text("Entre com o valor do crédito.")
+    return 2
+
+def addCredit_2(update: t.Update, context: tex.CallbackContext):
+    context.user_data['value'] = update.message.text
+    update.message.reply_text("Entre com uma descrição para o crédito. (ex: Adiantou a sua parte do aluguel)")
+    return 3
+
+def addCredit_3(update: t.Update, context: tex.CallbackContext):
     text = ""
-    if exists(person):
-        credits.append({ 'id': uuid.uuid4(), 'person': toLower(person), 'value': Decimal(value), 'description': description })
-        text = "O crédito de "+person+" no valor de R$"+value+" foi registrado."
+    if exists(context.user_data['person']):
+        credits.append({ 'id': uuid.uuid4(), 'person': toLower(context.user_data['person']), 'value': Decimal(context.user_data['value']), 'description': update.message.text })
+        text = "O crédito de "+context.user_data['person']+" no valor de R$"+context.user_data['value']+" foi registrado."
     else:
-        text = "O crédito não foi adicionado porque "+ person +" não está registrado(a) no orçamento."
+        text = "O crédito não foi adicionado porque "+ context.user_data['person'] +" não está registrado(a) no orçamento."
     update.message.reply_text(text)
 
 def showAllPeople(update: t.Update, context: tex.CallbackContext):
@@ -211,8 +247,28 @@ def main():
     dispatcher = updater.dispatcher
 
     dispatcher.add_handler(tex.CommandHandler('start', start))
-    dispatcher.add_handler(tex.CommandHandler('newperson', addPerson))
-    dispatcher.add_handler(tex.CommandHandler('newpayment', addPay))
+
+    person_handler = tex.ConversationHandler(
+        entry_points=[tex.CommandHandler('newperson', addPerson)],
+        states={
+            1: [tex.MessageHandler(tex.Filters.text, addPerson_1)],
+            2: [tex.MessageHandler(tex.Filters.text, addPerson_2)]
+        },
+        fallbacks=[tex.CommandHandler('newperson', addPerson)]
+    )
+    dispatcher.add_handler(person_handler)
+
+    payment_handler = tex.ConversationHandler(
+        entry_points=[tex.CommandHandler('newpayment', addPay)],
+        states={
+            1: [tex.MessageHandler(tex.Filters.text, addPay_1)],
+            2: [tex.MessageHandler(tex.Filters.text, addPay_2)],
+            3: [tex.MessageHandler(tex.Filters.text, addPay_3)]
+        },
+        fallbacks=[tex.CommandHandler('newpayment', addPay)]
+    )
+    dispatcher.add_handler(payment_handler)
+
     debt_handler = tex.ConversationHandler(
         entry_points=[tex.CommandHandler('newdebt', addDebt)],
         states={
@@ -221,7 +277,18 @@ def main():
         fallbacks=[tex.CommandHandler('newdebt', addDebt)]
     )
     dispatcher.add_handler(debt_handler)
-    dispatcher.add_handler(tex.CommandHandler('newcredit', addCredit))
+
+    credit_handler = tex.ConversationHandler(
+        entry_points=[tex.CommandHandler('newcredit', addCredit)],
+        states={
+            1: [tex.MessageHandler(tex.Filters.text, addCredit_1)],
+            2: [tex.MessageHandler(tex.Filters.text, addCredit_2)],
+            3: [tex.MessageHandler(tex.Filters.text, addCredit_3)]
+        },
+        fallbacks=[tex.CommandHandler('newcredit', addCredit)]
+    )
+    dispatcher.add_handler(credit_handler)
+
     dispatcher.add_handler(tex.CommandHandler('showpeople', showAllPeople))
     dispatcher.add_handler(tex.CommandHandler('showpayments', showAllPays))
     dispatcher.add_handler(tex.CommandHandler('showdebts', showAllDebts))
