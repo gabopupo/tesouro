@@ -143,6 +143,16 @@ def confirmDebt(update: t.Update, context: tex.CallbackContext):
     update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
     return tex.ConversationHandler.END
 
+def updateExpenses_credit(credit, reverse=False):
+    if reverse:
+        credit['value'] *= -1
+    
+    where = next(i for i, p in enumerate(payments) if p['name'] == credit['bound'])
+    expenses = payments[where]['expenses']
+    
+    where = next(i for i, e in enumerate(expenses) if e[0] == credit['person'])
+    expenses[where][1] -= credit['value']
+
 def addCredit(update: t.Update, context: tex.CallbackContext):
     update.message.reply_text("Você está adicionando um novo crédito. Entre com o nome da pessoa a recebê-la.")
     return 1
@@ -158,13 +168,31 @@ def addCredit_2(update: t.Update, context: tex.CallbackContext):
     return 3
 
 def addCredit_3(update: t.Update, context: tex.CallbackContext):
-    text = ""
     if exists(context.user_data['person']):
-        credits.append({ 'id': uuid.uuid4(), 'person': toLower(context.user_data['person']), 'value': Decimal(context.user_data['value']), 'description': update.message.text })
-        text = "O crédito de "+context.user_data['person']+" no valor de R$"+context.user_data['value']+" foi registrado."
+        credits.append({ 'id': uuid.uuid4(), 'person': toLower(context.user_data['person']), 'value': Decimal(context.user_data['value']), 'description': update.message.text, 'bound': None })
+        
+        pay_keys = []
+        pay_keys.append( ["(não vincular)"] )
+        for p in payments:
+            pay_keys.append( [p['name']] )
+        reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
+
+        update.message.reply_text("Selecione um pagamento para vincular ao crédito.", reply_markup=reply_markup)
+        return 4
     else:
         text = "O crédito não foi adicionado porque "+ context.user_data['person'] +" não está registrado(a) no orçamento."
-    update.message.reply_text(text)
+        update.message.reply_text(text)
+
+def confirmCredit(update: t.Update, context: tex.CallbackContext):
+    latest = credits[-1]
+    if update.message.text != "(não vincular)":
+        latest['bound'] = update.message.text
+        updateExpenses_credit(latest)
+    text = "O crédito de "+latest['person']+" no valor R$"+str(latest['value'])+" foi adicionado"
+    if latest['bound'] != None:
+        text += " e foi vinculado a "+latest['bound']
+    text += "."
+    update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
     return tex.ConversationHandler.END
 
 def showAllPeople(update: t.Update, context: tex.CallbackContext):
@@ -222,7 +250,10 @@ def deletePay(update: t.Update, context: tex.CallbackContext):
     for i, d in enumerate(debts):
         if d['bound'] == payments[where]['name']:
             del debts[i]
-    text = "O pagamento "+payments[where]['name']+" foi removido, assim como todas as suas dívidas vinculadas."
+    for i, c in enumerate(credits):
+        if c['bound'] == payments[where]['name']:
+            del credits[i]
+    text = "O pagamento "+payments[where]['name']+" foi removido, assim como todas as suas dívidas e seus créditos vinculados."
     del payments[where]
     update.message.reply_text(text)
     return tex.ConversationHandler.END
@@ -257,9 +288,11 @@ def deleteCredit_selector(update: t.Update, context: tex.CallbackContext):
     return 1
 
 def deleteCredit(update: t.Update, context: tex.CallbackContext):
-    which = int(re.match(".+?(?=:)", update.message.text)[0])
-    text = "O crédito de "+credits[which]['person']+" no valor R$"+str(credits[which]['value'])+" foi removido."
-    del credits[which]
+    where = int(re.match(".+?(?=:)", update.message.text)[0])
+    text = "O crédito de "+credits[where]['person']+" no valor R$"+str(credits[where]['value'])+" foi removido."
+    if credits[where]['bound'] != None:
+        updateExpenses_credit(credits[where], True)
+    del credits[where]
     update.message.reply_text(text)
     return tex.ConversationHandler.END
 
@@ -309,7 +342,8 @@ def main():
         states={
             1: [tex.MessageHandler(tex.Filters.text, addCredit_1)],
             2: [tex.MessageHandler(tex.Filters.text, addCredit_2)],
-            3: [tex.MessageHandler(tex.Filters.text, addCredit_3)]
+            3: [tex.MessageHandler(tex.Filters.text, addCredit_3)],
+            4: [tex.MessageHandler(tex.Filters.text, confirmCredit)]
         },
         fallbacks=[tex.CommandHandler('newcredit', addCredit)]
     )
