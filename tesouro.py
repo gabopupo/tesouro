@@ -141,6 +141,7 @@ def addDebt_5(update: t.Update, context: tex.CallbackContext):
 
     if payerValid and (exists(payee) or payee == None):
         debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': Decimal(context.user_data['value']), 'description': update.message.text, 'bound': None })
+        purge(update, context)
         # vincula uma dívida a um pagamento
         # COMPORTAMENTO: se uma pessoa X deve a Y, e ambos participam de um pagamento, vincular
         # a dívida a ele faz X pagar a sua parte do pagamento E o que ele deve a Y, e Y paga sua
@@ -159,7 +160,7 @@ def addDebt_5(update: t.Update, context: tex.CallbackContext):
             unknown = payee
         text = "A dívida não foi adicionada porque "+ unknown +" não está registrado(a) no orçamento."
         update.message.reply_text(text)
-    purge(update, context)
+        purge(update, context)
     return tex.ConversationHandler.END
 
 def updateExpenses(debt, reverse=False):
@@ -231,7 +232,7 @@ def addCredit_2(update: t.Update, context: tex.CallbackContext):
 def addCredit_3(update: t.Update, context: tex.CallbackContext):
     if exists(context.user_data['person']):
         credits.append({ 'id': uuid.uuid4(), 'person': toLower(context.user_data['person']), 'value': Decimal(context.user_data['value']), 'description': update.message.text, 'bound': None })
-
+        purge(update, context)
         pay_keys = []
         pay_keys.append( ["(não vincular)"] )
         for p in payments:
@@ -243,7 +244,7 @@ def addCredit_3(update: t.Update, context: tex.CallbackContext):
     else:
         text = "O crédito não foi adicionado porque "+ context.user_data['person'] +" não está registrado(a) no orçamento."
         update.message.reply_text(text)
-    purge(update, context)
+        purge(update, context)
     return tex.ConversationHandler.END
 
 def confirmCredit(update: t.Update, context: tex.CallbackContext):
@@ -333,6 +334,39 @@ def showReport(update: t.Update, context: tex.CallbackContext):
         out += people[i]['handle']+": "+str(costs[i])+"\n"
     update.message.reply_text(out)
     
+def deletePerson_selector(update: t.Update, context: tex.CallbackContext):
+    purge(update, context, False)
+    person_keys = []
+    for i, p in enumerate(people):
+        person_keys.append( [str(i)+": "+p['handle']] )
+    reply_markup = t.ReplyKeyboardMarkup(person_keys, one_time_keyboard=True)
+
+    context.user_data['bot'] = update.message.reply_text("Selecione uma pessoa.", reply_markup=reply_markup)
+
+    return 1
+
+def deletePerson(update: t.Update, context: tex.CallbackContext):
+    where = int(re.match(".+?(?=:)", update.message.text)[0])
+
+    for i, p in enumerate(payments):
+        for _, e in enumerate(p['expenses']):
+            if e[0] == people[where]['alias']:
+                del payments[i]
+                continue
+    for i, d in enumerate(debts):
+        if people[where]['alias'] in d['payer'] or people[where]['alias'] == d['payee']:
+            del debts[i]
+            continue
+    for i, c in enumerate(credits):
+        if people[where]['alias'] == c['person']:
+            del credits[i]
+            continue
+
+    text = people[where]['handle'] + " foi removido(a), assim como todos os pagamentos, dívidas e créditos em seu nome."
+    del people[where]
+    update.message.reply_text(text)
+    purge(update, context)
+    return tex.ConversationHandler.END
 
 def deletePay_selector(update: t.Update, context: tex.CallbackContext):
     purge(update, context, False)
@@ -469,6 +503,16 @@ def main():
     dispatcher.add_handler(tex.CommandHandler('showdebts', showAllDebts))
     dispatcher.add_handler(tex.CommandHandler('showcredits', showAllCredits))
     dispatcher.add_handler(tex.CommandHandler('showreport', showReport))
+
+    delete_person_handler = tex.ConversationHandler(
+        entry_points=[tex.CommandHandler('deleteperson', deletePerson_selector)],
+        states={
+            1: [tex.MessageHandler(tex.Filters.text, deletePerson)]
+        },
+        fallbacks=[tex.CommandHandler('deleteperson', deletePerson_selector)]
+    )
+    dispatcher.add_handler(delete_person_handler)
+
     delete_pay_handler = tex.ConversationHandler(
         entry_points=[tex.CommandHandler('deletepayment', deletePay_selector)],
         states={
