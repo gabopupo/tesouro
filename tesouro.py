@@ -27,7 +27,6 @@ def purge(update, context, bot=True):
 # adiciona uma pessoa no orçamento
 def addPerson(update: t.Update, context: tex.CallbackContext):
     context.user_data['bot'] = update.message.reply_text("Você está adicionando uma nova pessoa. Entre com o seu nome de usuário. (ex: @gpupo)")
-    purge(update, context, False)
     return 1
 
 def addPerson_1(update: t.Update, context: tex.CallbackContext):
@@ -51,7 +50,6 @@ def exists(person):
 # adiciona um pagamento
 def addPay(update: t.Update, context: tex.CallbackContext):
     context.user_data['bot'] = update.message.reply_text("Você está adicionando um novo pagamento. Entre com o nome do pagamento. (ex: Aluguel)")
-    purge(update, context, False)
     return 1
 
 def addPay_1(update: t.Update, context: tex.CallbackContext):
@@ -91,7 +89,6 @@ def addPay_3(update: t.Update, context: tex.CallbackContext):
 # adiciona uma dívida
 def addDebt(update: t.Update, context: tex.CallbackContext):
     context.user_data['bot'] = update.message.reply_text("Você está adicionando uma nova dívida. Entre com o nome do devedor. Se houver múltiplos devedores, entre com o nome de cada um, separados por vírgula.")
-    purge(update, context, False)
     return 1
 
 def addDebt_1(update: t.Update, context: tex.CallbackContext):
@@ -213,7 +210,6 @@ def updateExpenses_credit(credit, reverse=False):
 
 def addCredit(update: t.Update, context: tex.CallbackContext):
     context.user_data['bot'] = update.message.reply_text("Você está adicionando um novo crédito. Entre com o nome da pessoa a recebê-la.")
-    purge(update, context, False)
     return 1
 
 def addCredit_1(update: t.Update, context: tex.CallbackContext):
@@ -260,7 +256,6 @@ def confirmCredit(update: t.Update, context: tex.CallbackContext):
     return tex.ConversationHandler.END
 
 def showAllPeople(update: t.Update, context: tex.CallbackContext):
-    purge(update, context, False)
     out = ""
     if len(people) == 0:
         out += "Não há pessoas registradas."
@@ -271,7 +266,6 @@ def showAllPeople(update: t.Update, context: tex.CallbackContext):
 
 # Exibe todos os pagamentos atuais
 def showAllPays(update: t.Update, context: tex.CallbackContext):
-    purge(update, context, False)
     out = ""
     if len(payments) == 0:
         out += "Não há pagamentos registrados."
@@ -284,7 +278,6 @@ def showAllPays(update: t.Update, context: tex.CallbackContext):
 
 # Exibe todas as dívidas atuais
 def showAllDebts(update: t.Update, context: tex.CallbackContext):
-    purge(update, context, False)
     out = ""
     if len(debts) == 0:
         out += "Não há dívidas registradas."
@@ -300,7 +293,6 @@ def showAllDebts(update: t.Update, context: tex.CallbackContext):
     update.message.reply_text(out)
 
 def showAllCredits(update: t.Update, context: tex.CallbackContext):
-    purge(update, context, False)
     out = ""
     if len(credits) == 0:
         out += "Não há créditos registrados."
@@ -310,7 +302,6 @@ def showAllCredits(update: t.Update, context: tex.CallbackContext):
     update.message.reply_text(out)
 
 def showReport(update: t.Update, context: tex.CallbackContext):
-    purge(update, context, False)
     out = ""
     costs = [0] * len(people)
 
@@ -334,7 +325,6 @@ def showReport(update: t.Update, context: tex.CallbackContext):
     update.message.reply_text(out)
     
 def deletePerson_selector(update: t.Update, context: tex.CallbackContext):
-    purge(update, context, False)
     person_keys = []
     for i, p in enumerate(people):
         person_keys.append( [str(i)+": "+p['handle']] )
@@ -368,7 +358,6 @@ def deletePerson(update: t.Update, context: tex.CallbackContext):
     return tex.ConversationHandler.END
 
 def deletePay_selector(update: t.Update, context: tex.CallbackContext):
-    purge(update, context, False)
     pay_keys = []
     for i, p in enumerate(payments):
         pay_keys.append( [str(i)+": "+p['name']] )
@@ -392,7 +381,6 @@ def deletePay(update: t.Update, context: tex.CallbackContext):
     return tex.ConversationHandler.END
 
 def deleteDebt_selector(update: t.Update, context: tex.CallbackContext):
-    purge(update, context, False)
     debt_keys = []
     for i, d in enumerate(debts):
         debt_keys.append( [str(i)+": "+d['description']] )
@@ -421,7 +409,6 @@ def deleteDebt(update: t.Update, context: tex.CallbackContext):
     return tex.ConversationHandler.END
 
 def deleteCredit_selector(update: t.Update, context: tex.CallbackContext):
-    purge(update, context, False)
     credit_keys = []
     for i, c in enumerate(credits):
         credit_keys.append( [str(i)+": crédito de "+c['person']+" no valor "+'{0:.2f}'.format(float(c['value']))] )
