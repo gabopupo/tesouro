@@ -2,27 +2,25 @@ import re
 import telegram as t
 import telegram.ext as tex
 import logging as log
-import uuid
+from secrets import token
+from dbhelper import DBHelper
+from utils import toLower, purge, exists
 
 ADD, SUB = range(1, 3)
-people = []
-payments = []
-debts = []
-credits = []
+database = None
+# people = []
+# payments = []
+# debts = []
+# credits = []
 
 # inicializa o bot
 def start(update: t.Update, context: tex.CallbackContext):
     text = open("start.txt", "r").read()
+
+    global database
+    database = DBHelper(update.message.chat_id)
+
     update.message.reply_text(text)
-
-def toLower(s):
-    s = str(s)
-    return s.lower()
-
-def purge(update, context, bot=True):
-    if bot:
-        context.user_data['bot'].delete()
-    update.message.delete()
 
 # adiciona uma pessoa no orçamento
 def addPerson(update: t.Update, context: tex.CallbackContext):
@@ -39,13 +37,12 @@ def addPerson_1(update: t.Update, context: tex.CallbackContext):
 def addPerson_2(update: t.Update, context: tex.CallbackContext):
     purge(update, context)
 
-    people.append({ 'id': uuid.uuid4(), 'handle': context.user_data['handle'], 'alias': toLower(update.message.text) })
+    person = { 'handle': context.user_data['handle'], 'alias': toLower(update.message.text) }
+    database.commit('people', person)
+
     text = context.user_data['handle']+" foi adicionado(a)."
     update.message.reply_text(text)
     return tex.ConversationHandler.END
-    
-def exists(person):
-    return (any(person == p['alias'] for p in people) or any(person == p['handle'] for p in people))
 
 # adiciona um pagamento
 def addPay(update: t.Update, context: tex.CallbackContext):
@@ -66,10 +63,12 @@ def addPay_2(update: t.Update, context: tex.CallbackContext):
 
 def addPay_3(update: t.Update, context: tex.CallbackContext):
     payers = [toLower(person.strip()) for person in update.message.text.split(',')]
+    population = database.dump('people')
+
     valid = True
     unknown = ""
     for p in payers:
-        if not exists(p):
+        if not exists(p, population):
             valid = False
             unknown = p
             break
@@ -77,7 +76,9 @@ def addPay_3(update: t.Update, context: tex.CallbackContext):
         value = [float(context.user_data['value'])/len(payers) for i in range(len(payers))]
         expenses = list(map(list, zip(payers, value)))
 
-        payments.append( { 'id': uuid.uuid4(), 'name': context.user_data['name'], 'value': context.user_data['value'], 'expenses': expenses })
+        payment = { 'name': context.user_data['name'], 'value': context.user_data['value'], 'expenses': expenses }
+        database.commit('payments', payment)
+
         text = "O pagamento "+context.user_data['name']+" de valor R$"+'{0:.2f}'.format(float(context.user_data['value']))+" foi adicionado."
         update.message.reply_text(text)
     else:
@@ -126,17 +127,21 @@ def addDebt_4(update: t.Update, context: tex.CallbackContext):
 def addDebt_5(update: t.Update, context: tex.CallbackContext):
     payer = [toLower(p) for p in context.user_data['payer']]
     payee = toLower(context.user_data['payee']) if context.user_data['payee'] != None else None
+    population = database.dump('people')
 
     payerValid = True
     unknown = None
     for p in payer:
-        if not exists(p):
+        if not exists(p, population):
             payerValid = False
             unknown = p
             break
 
-    if payerValid and (exists(payee) or payee == None):
-        debts.append({ 'id': uuid.uuid4(), 'payer': payer, 'payee': payee, 'value': float(context.user_data['value']), 'description': update.message.text, 'bound': None })
+    if payerValid and (exists(payee, population) or payee == None):
+        debt = { 'payer': payer, 'payee': payee, 'value': float(context.user_data['value']), 'description': update.message.text, 'bound': None }
+        context.user_data['latest'] = debt
+        payments = database.dump('payments')
+
         purge(update, context)
         # vincula uma dívida a um pagamento
         # COMPORTAMENTO: se uma pessoa X deve a Y, e ambos participam de um pagamento, vincular
@@ -146,7 +151,8 @@ def addDebt_5(update: t.Update, context: tex.CallbackContext):
         pay_keys = []
         pay_keys.append( ["(não vincular)"] )
         for p in payments:
-            pay_keys.append( [p['name']] )
+            pid, name = p['_id'], p['name']
+            pay_keys.append( [f'{pid}: {name}'] )
         reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
 
         context.user_data['bot'] = update.message.reply_text("Selecione um pagamento para vincular à dívida.", reply_markup=reply_markup)
@@ -164,8 +170,8 @@ def updateExpenses(debt, reverse=False):
     if reverse:
         value *= -1
     
-    where = next(i for i, p in enumerate(payments) if p['name'] == debt['bound'])
-    expenses = payments[where]['expenses']
+    payment = database.find('payments', debt['bound'])
+    expenses = payment['expenses']
     
     for p in debt['payer']:
         where = next(i for i, e in enumerate(expenses) if e[0] == p)
@@ -175,26 +181,31 @@ def updateExpenses(debt, reverse=False):
         where = next(i for i, e in enumerate(expenses) if e[0] == debt['payee'])
         expenses[where][1] -= float(value)
 
+    database.update('payments', debt['bound'], {'expenses': expenses})
+    return payment['name']
+
 # Exibe uma mensagem de confirmação da criação de uma dívida
 def confirmDebt(update: t.Update, context: tex.CallbackContext):
-    latest = debts[-1]
+    debt = context.user_data['latest']
+    
     if update.message.text != "(não vincular)":
-        latest['bound'] = update.message.text
-        updateExpenses(latest)
+        debt['bound'] = int(update.message.text.split(':')[0])
+        bound_payment = updateExpenses(debt)
     text = "A dívida de"
 
-    for p in latest['payer']:
+    for p in debt['payer']:
         text += " "+p
 
-    if latest['payee'] != None:
-        text += " a "+latest['payee']
+    if debt['payee'] != None:
+        text += " a "+debt['payee']
     
-    text += " de valor R$"+'{0:.2f}'.format(float(latest['value']))+" foi adicionada"
-    if latest['bound'] != None:
-        text += " e foi vinculada a "+latest['bound']
+    text += " de valor R$"+'{0:.2f}'.format(float(debt['value']))+" foi adicionada"
+    if debt['bound'] != None:
+        text += " e foi vinculada a "+bound_payment
     text += "."
     
     update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
+    database.commit('debts', debt)
     purge(update, context)
     return tex.ConversationHandler.END
 
@@ -226,7 +237,9 @@ def addCredit_2(update: t.Update, context: tex.CallbackContext):
 
 def addCredit_3(update: t.Update, context: tex.CallbackContext):
     if exists(context.user_data['person']):
-        credits.append({ 'id': uuid.uuid4(), 'person': toLower(context.user_data['person']), 'value': float(context.user_data['value']), 'description': update.message.text, 'bound': None })
+        credit = { 'person': toLower(context.user_data['person']), 'value': float(context.user_data['value']), 'description': update.message.text, 'bound': None }
+        context.user_data['latest'] = credit
+
         purge(update, context)
         pay_keys = []
         pay_keys.append( ["(não vincular)"] )
@@ -243,20 +256,23 @@ def addCredit_3(update: t.Update, context: tex.CallbackContext):
     return tex.ConversationHandler.END
 
 def confirmCredit(update: t.Update, context: tex.CallbackContext):
-    latest = credits[-1]
+    credit = context.user_data['latest']
     if update.message.text != "(não vincular)":
-        latest['bound'] = update.message.text
-        updateExpenses_credit(latest)
-    text = "O crédito de "+latest['person']+" no valor R$"+'{0:.2f}'.format(float(latest['value']))+" foi adicionado"
-    if latest['bound'] != None:
-        text += " e foi vinculado a "+latest['bound']
+        credit['bound'] = update.message.text
+        updateExpenses_credit(credit)
+    text = "O crédito de "+credit['person']+" no valor R$"+'{0:.2f}'.format(float(credit['value']))+" foi adicionado"
+    if credit['bound'] != None:
+        text += " e foi vinculado a "+credit['bound']
     text += "."
     update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
+    database.commit('credits', credit)
+
     purge(update, context)
     return tex.ConversationHandler.END
 
 def showAllPeople(update: t.Update, context: tex.CallbackContext):
     out = ""
+    people = database.dump('people')
     if len(people) == 0:
         out += "Não há pessoas registradas."
     else:
@@ -267,6 +283,7 @@ def showAllPeople(update: t.Update, context: tex.CallbackContext):
 # Exibe todos os pagamentos atuais
 def showAllPays(update: t.Update, context: tex.CallbackContext):
     out = ""
+    payments = database.dump('payments')
     if len(payments) == 0:
         out += "Não há pagamentos registrados."
     else:
@@ -279,6 +296,7 @@ def showAllPays(update: t.Update, context: tex.CallbackContext):
 # Exibe todas as dívidas atuais
 def showAllDebts(update: t.Update, context: tex.CallbackContext):
     out = ""
+    debts = database.dump('debts')
     if len(debts) == 0:
         out += "Não há dívidas registradas."
     else:
@@ -294,6 +312,7 @@ def showAllDebts(update: t.Update, context: tex.CallbackContext):
 
 def showAllCredits(update: t.Update, context: tex.CallbackContext):
     out = ""
+    credits = database.dump('credits')
     if len(credits) == 0:
         out += "Não há créditos registrados."
     else:
