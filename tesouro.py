@@ -213,11 +213,14 @@ def updateExpenses_credit(credit, reverse=False):
     if reverse:
         credit['value'] *= -1
     
-    where = next(i for i, p in enumerate(payments) if p['name'] == credit['bound'])
-    expenses = payments[where]['expenses']
+    payment = database.find('payments', credit['bound'])
+    expenses = payment['expenses']
     
     where = next(i for i, e in enumerate(expenses) if e[0] == credit['person'])
     expenses[where][1] -= credit['value']
+
+    database.update('payments', credit['bound'], {'expenses': expenses})
+    return payment['name']
 
 def addCredit(update: t.Update, context: tex.CallbackContext):
     context.user_data['bot'] = update.message.reply_text("Você está adicionando um novo crédito. Entre com o nome da pessoa a recebê-la.")
@@ -236,15 +239,19 @@ def addCredit_2(update: t.Update, context: tex.CallbackContext):
     return 3
 
 def addCredit_3(update: t.Update, context: tex.CallbackContext):
-    if exists(context.user_data['person']):
+    population = database.dump('people')
+
+    if exists(context.user_data['person'], population):
         credit = { 'person': toLower(context.user_data['person']), 'value': float(context.user_data['value']), 'description': update.message.text, 'bound': None }
         context.user_data['latest'] = credit
+        payments = database.dump('payments')
 
         purge(update, context)
         pay_keys = []
         pay_keys.append( ["(não vincular)"] )
         for p in payments:
-            pay_keys.append( [p['name']] )
+            pid, name = p['_id'], p['name']
+            pay_keys.append( [f'{pid}: {name}'] )
         reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
 
         context.user_data['bot'] = update.message.reply_text("Selecione um pagamento para vincular ao crédito.", reply_markup=reply_markup)
@@ -257,12 +264,13 @@ def addCredit_3(update: t.Update, context: tex.CallbackContext):
 
 def confirmCredit(update: t.Update, context: tex.CallbackContext):
     credit = context.user_data['latest']
+
     if update.message.text != "(não vincular)":
-        credit['bound'] = update.message.text
-        updateExpenses_credit(credit)
+        credit['bound'] = int(update.message.text.split(':')[0])
+        bound_payment = updateExpenses_credit(credit)
     text = "O crédito de "+credit['person']+" no valor R$"+'{0:.2f}'.format(float(credit['value']))+" foi adicionado"
     if credit['bound'] != None:
-        text += " e foi vinculado a "+credit['bound']
+        text += " e foi vinculado a "+bound_payment
     text += "."
     update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
     database.commit('credits', credit)
@@ -273,22 +281,22 @@ def confirmCredit(update: t.Update, context: tex.CallbackContext):
 def showAllPeople(update: t.Update, context: tex.CallbackContext):
     out = ""
     people = database.dump('people')
-    if len(people) == 0:
+    if people.count() == 0:
         out += "Não há pessoas registradas."
     else:
-        for i, p in enumerate(people):
-            out += p['handle']+" (ou "+p['alias']+")\n"
+        for _, p in enumerate(people):
+            out += str(p['_id'])+": "+p['handle']+" (ou "+p['alias']+")\n"
     update.message.reply_text(out)
 
 # Exibe todos os pagamentos atuais
 def showAllPays(update: t.Update, context: tex.CallbackContext):
     out = ""
     payments = database.dump('payments')
-    if len(payments) == 0:
+    if payments.count() == 0:
         out += "Não há pagamentos registrados."
     else:
-        for i, p in enumerate(payments):
-            out += p['name']+": "+'{0:.2f}'.format(float(p['value']))+"\n"
+        for _, p in enumerate(payments):
+            out += str(p['_id'])+": "+p['name']+" "+'{0:.2f}'.format(float(p['value']))+"\n"
             for e in enumerate(p['expenses']):
                 out += "\t\t\t"+str(e[1][0])+"\t\t"+'{0:.2f}'.format(float(e[1][1]))+"\n"
     update.message.reply_text(out)
@@ -297,10 +305,10 @@ def showAllPays(update: t.Update, context: tex.CallbackContext):
 def showAllDebts(update: t.Update, context: tex.CallbackContext):
     out = ""
     debts = database.dump('debts')
-    if len(debts) == 0:
+    if debts.count() == 0:
         out += "Não há dívidas registradas."
     else:
-        for i, d in enumerate(debts):
+        for _, d in enumerate(debts):
             for p in d['payer']:
                 out += p+" "
             
@@ -313,16 +321,21 @@ def showAllDebts(update: t.Update, context: tex.CallbackContext):
 def showAllCredits(update: t.Update, context: tex.CallbackContext):
     out = ""
     credits = database.dump('credits')
-    if len(credits) == 0:
+    if credits.count() == 0:
         out += "Não há créditos registrados."
     else:
-        for i, c in enumerate(credits):
+        for _, c in enumerate(credits):
             out += c['person']+"\t\t-"+'{0:.2f}'.format(float(c['value']))+" ("+c['description']+")\n"
     update.message.reply_text(out)
 
 def showReport(update: t.Update, context: tex.CallbackContext):
     out = ""
-    costs = [0] * len(people)
+    people = database.dump('people')
+    payments = database.dump('payments')
+    debts = database.dump('debts')
+    credits = database.dump('credits')
+
+    costs = [0] * people.count()
 
     for i, p in enumerate(people):
         for _, a in enumerate(payments):
