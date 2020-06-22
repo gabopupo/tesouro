@@ -1,3 +1,4 @@
+import os
 import re
 import telegram as t
 import telegram.ext as tex
@@ -588,7 +589,8 @@ def main():
     )
     dispatcher.add_handler(delete_credit_handler)
 
-    updater.start_polling()
+    updater.start_webhook(listen="0.0.0.0", port=int(os.environ.get('PORT', '8443')), url_path=token)
+    updater.bot.set_webhook('https://tesourobot.herokuapp.com/'+token)
     updater.idle()
 
 if __name__ == "__main__":
