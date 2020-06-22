@@ -19,6 +19,11 @@ class DBHelper:
         )
         return ret['seq']
 
+    def __autodec(self, collection):
+        self.my_base.counters.find_one_and_update(
+            { '_id': collection }, { '$inc': { 'seq': -1 } }
+        )
+
     def commit(self, collection, data):
         data.update({'_id': self.__autoinc(collection)})
         self.my_base[collection].insert_one(data)
@@ -31,3 +36,7 @@ class DBHelper:
 
     def update(self, collection, queryID, newData):
         self.my_base[collection].update_one({'_id': queryID}, {'$set': newData}, upsert=False)
+
+    def delete(self, collection, queryID):
+        self.__autodec(collection)
+        self.my_base[collection].delete_one({'_id': queryID})

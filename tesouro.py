@@ -5,6 +5,7 @@ import logging as log
 from secrets import token
 from dbhelper import DBHelper
 from utils import toLower, purge, exists
+from pymongo import errors
 
 ADD, SUB = range(1, 3)
 database = None
@@ -17,10 +18,13 @@ database = None
 def start(update: t.Update, context: tex.CallbackContext):
     text = open("start.txt", "r").read()
 
-    global database
-    database = DBHelper(update.message.chat_id)
-
-    update.message.reply_text(text)
+    try:
+        global database
+        database = DBHelper(update.message.chat_id)
+    except errors.ServerSelectionTimeoutError:
+        text = "Ocorreu um erro ao abrir uma conexão com o servidor. Tente novamente. `Erro: serviço indisponível`"
+    
+    update.message.reply_markdown(text)
 
 # adiciona uma pessoa no orçamento
 def addPerson(update: t.Update, context: tex.CallbackContext):
@@ -330,12 +334,12 @@ def showAllCredits(update: t.Update, context: tex.CallbackContext):
 
 def showReport(update: t.Update, context: tex.CallbackContext):
     out = ""
-    people = database.dump('people')
+    people = list(database.dump('people'))
     payments = database.dump('payments')
     debts = database.dump('debts')
     credits = database.dump('credits')
 
-    costs = [0] * people.count()
+    costs = [0] * len(people)
 
     for i, p in enumerate(people):
         for _, a in enumerate(payments):
@@ -358,8 +362,10 @@ def showReport(update: t.Update, context: tex.CallbackContext):
     
 def deletePerson_selector(update: t.Update, context: tex.CallbackContext):
     person_keys = []
-    for i, p in enumerate(people):
-        person_keys.append( [str(i)+": "+p['handle']] )
+    people = database.dump('people')
+
+    for _, p in enumerate(people):
+        person_keys.append( [str(p['_id'])+": "+p['handle']] )
     reply_markup = t.ReplyKeyboardMarkup(person_keys, one_time_keyboard=True)
 
     context.user_data['bot'] = update.message.reply_text("Selecione uma pessoa.", reply_markup=reply_markup)
@@ -367,74 +373,97 @@ def deletePerson_selector(update: t.Update, context: tex.CallbackContext):
     return 1
 
 def deletePerson(update: t.Update, context: tex.CallbackContext):
-    where = int(re.match(".+?(?=:)", update.message.text)[0])
+    id = int(update.message.text.split(':')[0])
+    person = database.find('people', id)
+
+    payments = database.dump('payments')
+    people = database.dump('people')
+    debts = database.dump('debts')
+    credits = database.dump('credits')
 
     for i, p in enumerate(payments):
         for _, e in enumerate(p['expenses']):
-            if e[0] == people[where]['alias']:
-                del payments[i]
+            if e[0] == person['alias']:
+                # del payments[i]
+                database.delete('payments', p['_id'])
                 continue
     for i, d in enumerate(debts):
-        if people[where]['alias'] in d['payer'] or people[where]['alias'] == d['payee']:
-            del debts[i]
+        if person['alias'] in d['payer'] or person['alias'] == d['payee']:
+            # del debts[i]
+            database.delete('debts', d['_id'])
             continue
     for i, c in enumerate(credits):
-        if people[where]['alias'] == c['person']:
-            del credits[i]
+        if person['alias'] == c['person']:
+            # del credits[i]
+            database.delete('credits', c['_id'])
             continue
 
-    text = people[where]['handle'] + " foi removido(a), assim como todos os pagamentos, dívidas e créditos em seu nome."
-    del people[where]
+    text = person['handle'] + " foi removido(a), assim como todos os pagamentos, dívidas e créditos em seu nome."
+    # del people[where]
+    database.delete('people', id)
     update.message.reply_text(text)
     purge(update, context)
     return tex.ConversationHandler.END
 
 def deletePay_selector(update: t.Update, context: tex.CallbackContext):
     pay_keys = []
-    for i, p in enumerate(payments):
-        pay_keys.append( [str(i)+": "+p['name']] )
+    payments = database.dump('payments')
+    for _, p in enumerate(payments):
+        pay_keys.append( [str(p['_id'])+": "+p['name']] )
     reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
 
     context.user_data['bot'] = update.message.reply_text("Selecione um pagamento.", reply_markup=reply_markup)
     return 2
 
 def deletePay(update: t.Update, context: tex.CallbackContext):
-    where = int(re.match(".+?(?=:)", update.message.text)[0])
+    id = int(update.message.text.split(':')[0])
+    payment = database.find('payments', id)
+    debts = database.dump('debts')
+    credits = database.dump('credits')
+
+    print(payment)
+
     for i, d in enumerate(debts):
-        if d['bound'] == payments[where]['name']:
-            del debts[i]
+        if d['bound'] == payment['_id']:
+            # del debts[i]
+            database.delete('debts', d['_id'])
     for i, c in enumerate(credits):
-        if c['bound'] == payments[where]['name']:
-            del credits[i]
-    text = "O pagamento "+payments[where]['name']+" foi removido, assim como todas as suas dívidas e seus créditos vinculados."
-    del payments[where]
+        if c['bound'] == payment['_id']:
+            # del credits[i]
+            database.delete('credits', c['_id'])
+    text = "O pagamento "+payment['name']+" foi removido, assim como todas as suas dívidas e seus créditos vinculados."
+    #del payments[where]
+    database.delete('payments', id)
     update.message.reply_text(text)
     purge(update, context)
     return tex.ConversationHandler.END
 
 def deleteDebt_selector(update: t.Update, context: tex.CallbackContext):
     debt_keys = []
-    for i, d in enumerate(debts):
-        debt_keys.append( [str(i)+": "+d['description']] )
+    debts = database.dump('debts')
+    for _, d in enumerate(debts):
+        debt_keys.append( [str(d['_id'])+": "+d['description']] )
     reply_markup = t.ReplyKeyboardMarkup(debt_keys, one_time_keyboard=True)
 
     context.user_data['bot'] = update.message.reply_text("Selecione uma dívida.", reply_markup=reply_markup)
     return 3
 
 def deleteDebt(update: t.Update, context: tex.CallbackContext):
-    where = int(re.match(".+?(?=:)", update.message.text)[0])
+    id = int(update.message.text.split(':')[0])
+    debt = database.find('debts', id)
 
     text = "A dívida de"
-    for p in debts[where]['payer']:
+    for p in debt['payer']:
         text += " "+p
 
-    if debts[where]['payee'] != None:
-        text += " a "+debts[where]['payee']
-    text += " de valor R$"+'{0:.2f}'.format(float(debts[where]['value']))+" foi removida."
+    if debt['payee'] != None:
+        text += " a "+debt['payee']
+    text += " de valor R$"+'{0:.2f}'.format(float(debt['value']))+" foi removida."
 
-    if debts[where]['bound'] != None:
-        updateExpenses(debts[where], True)
-    del debts[where]
+    if debt['bound'] != None:
+        updateExpenses(debt, True)
+    # del debts[where]
+    database.delete('debts', debt['_id'])
 
     update.message.reply_text(text)
     purge(update, context)
@@ -442,19 +471,23 @@ def deleteDebt(update: t.Update, context: tex.CallbackContext):
 
 def deleteCredit_selector(update: t.Update, context: tex.CallbackContext):
     credit_keys = []
-    for i, c in enumerate(credits):
-        credit_keys.append( [str(i)+": crédito de "+c['person']+" no valor "+'{0:.2f}'.format(float(c['value']))] )
+    credits = database.dump('credits')
+    for _, c in enumerate(credits):
+        credit_keys.append( [str(c['_id'])+": crédito de "+c['person']+" no valor "+'{0:.2f}'.format(float(c['value']))] )
     reply_markup = t.ReplyKeyboardMarkup(credit_keys, one_time_keyboard=True)
 
     context.user_data['bot'] = update.message.reply_text("Selecione um crédito.", reply_markup=reply_markup)
     return 1
 
 def deleteCredit(update: t.Update, context: tex.CallbackContext):
-    where = int(re.match(".+?(?=:)", update.message.text)[0])
-    text = "O crédito de "+credits[where]['person']+" no valor R$"+'{0:.2f}'.format(float(credits[where]['value']))+" foi removido."
-    if credits[where]['bound'] != None:
-        updateExpenses_credit(credits[where], True)
-    del credits[where]
+    id = int(update.message.text.split(':')[0])
+    credit = database.find('credits', id)
+
+    text = "O crédito de "+credit['person']+" no valor R$"+'{0:.2f}'.format(float(credit['value']))+" foi removido."
+    if credit['bound'] != None:
+        updateExpenses_credit(credit, True)
+    # del credits[where]
+    database.delete('credits', credit['_id'])
     update.message.reply_text(text)
     purge(update, context)
     return tex.ConversationHandler.END
