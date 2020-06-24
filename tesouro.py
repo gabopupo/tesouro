@@ -1,5 +1,6 @@
 import os
 import re
+import pytz
 import telegram as t
 import telegram.ext as tex
 import logging as log
@@ -7,13 +8,11 @@ from secrets import token
 from dbhelper import DBHelper
 from utils import toLower, purge, exists
 from pymongo import errors
+from datetime import datetime
 
 ADD, SUB = range(1, 3)
 database = None
-# people = []
-# payments = []
-# debts = []
-# credits = []
+os.environ['TZ'] = 'UTC'
 
 # inicializa o bot
 def start(update: t.Update, context: tex.CallbackContext):
@@ -360,6 +359,38 @@ def showReport(update: t.Update, context: tex.CallbackContext):
         
         out += people[i]['handle']+": "+'{0:.2f}'.format(float(costs[i]))+"\n"
     update.message.reply_text(out)
+
+def setReminder_selector(update: t.Update, context: tex.CallbackContext):
+    pay_keys = []
+    payments = database.dump('payments')
+    for _, p in enumerate(payments):
+        pay_keys.append( [str(p['_id'])+": "+p['name']] )
+    reply_markup = t.ReplyKeyboardMarkup(pay_keys, one_time_keyboard=True)
+
+    context.user_data['bot'] = update.message.reply_text("Selecione um pagamento.", reply_markup=reply_markup)
+    return 1
+
+def setReminder_date(update: t.Update, context: tex.CallbackContext):
+    context.user_data['payment'] = update.message.text
+    purge(update, context)
+    context.user_data['bot'] = update.message.reply_text("Defina a data do lembrete. (dd/mm/aaaa)")
+    return 2
+
+def reminderCallback(context: tex.CallbackContext):
+    chatID, paymentName = context.job.context
+    text = 'Lembrete! O pagamento '+paymentName+' precisa ser pago em alguns dias.'
+    context.bot.send_message(chat_id=chatID, text=text)
+
+def setReminder(update: t.Update, context: tex.CallbackContext):
+    date = [int(d) for d in update.message.text.strip().split('/')]
+    payment = context.user_data['payment'].split(':')[-1].strip()
+    
+    when = datetime(date[2], date[1], date[0], 16, 5, 0, tzinfo=pytz.utc)
+
+    context.job_queue.run_once(reminderCallback, when, context=[update.message.chat_id, payment])
+    purge(update, context)
+    update.message.reply_text('Lembrete marcado para '+str(date[0])+'/'+str(date[1])+'/'+str(date[2]))
+
     
 def deletePerson_selector(update: t.Update, context: tex.CallbackContext):
     person_keys = []
@@ -553,6 +584,16 @@ def main():
     dispatcher.add_handler(tex.CommandHandler('showcredits', showAllCredits))
     dispatcher.add_handler(tex.CommandHandler('showreport', showReport))
 
+    reminder_handler = tex.ConversationHandler(
+        entry_points=[tex.CommandHandler('setreminder', setReminder_selector)],
+        states={
+            1: [tex.MessageHandler(tex.Filters.text, setReminder_date)],
+            2: [tex.MessageHandler(tex.Filters.text, setReminder, pass_job_queue=True)]
+        },
+        fallbacks=[tex.CommandHandler('setreminder', setReminder_selector)]
+    )
+    dispatcher.add_handler(reminder_handler)
+
     delete_person_handler = tex.ConversationHandler(
         entry_points=[tex.CommandHandler('deleteperson', deletePerson_selector)],
         states={
@@ -589,8 +630,9 @@ def main():
     )
     dispatcher.add_handler(delete_credit_handler)
 
-    updater.start_webhook(listen="0.0.0.0", port=int(os.environ.get('PORT', '8443')), url_path=token)
-    updater.bot.set_webhook('https://tesourobot.herokuapp.com/'+token)
+    # updater.start_webhook(listen="0.0.0.0", port=int(os.environ.get('PORT', '8443')), url_path=token)
+    # updater.bot.set_webhook('https://tesourobot.herokuapp.com/'+token)
+    updater.start_polling()
     updater.idle()
 
 if __name__ == "__main__":
