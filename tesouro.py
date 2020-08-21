@@ -33,13 +33,13 @@ def addPerson(update: t.Update, context: tex.CallbackContext):
 
 def addPerson_1(update: t.Update, context: tex.CallbackContext):
     context.user_data['handle'] = update.message.text
-    purge(update, context)
+    #purge(update, context)
 
     context.user_data['bot'] = update.message.reply_text("Entre com um apelido dessa pessoa, que seja curto e fácil de lembrar. (ex: Pupo)")
     return 2
 
 def addPerson_2(update: t.Update, context: tex.CallbackContext):
-    purge(update, context)
+    #purge(update, context)
 
     person = { 'handle': context.user_data['handle'], 'alias': toLower(update.message.text) }
     database.commit('people', person)
@@ -55,13 +55,13 @@ def addPay(update: t.Update, context: tex.CallbackContext):
 
 def addPay_1(update: t.Update, context: tex.CallbackContext):
     context.user_data['name'] = update.message.text
-    purge(update, context)
+    #purge(update, context)
     context.user_data['bot'] = update.message.reply_text("Entre com o valor do pagamento.")
     return 2
 
 def addPay_2(update: t.Update, context: tex.CallbackContext):
     context.user_data['value'] = update.message.text
-    purge(update, context)
+    #purge(update, context)
     context.user_data['bot'] = update.message.reply_text("Entre com as pessoas pagantes, separadas por vírgula.")
     return 3
 
@@ -88,7 +88,7 @@ def addPay_3(update: t.Update, context: tex.CallbackContext):
     else:
         text = "O pagamento não foi adicionada porque "+ unknown +" não está registrado(a) no orçamento."
         update.message.reply_text(text)
-    purge(update, context)
+    #purge(update, context)
     return tex.ConversationHandler.END
 
 # adiciona uma dívida
@@ -98,7 +98,7 @@ def addDebt(update: t.Update, context: tex.CallbackContext):
 
 def addDebt_1(update: t.Update, context: tex.CallbackContext):
     context.user_data['payer'] = [toLower(person.strip()) for person in update.message.text.split(',')]
-    purge(update, context)
+    #purge(update, context)
     decision = [["0: Sim"], ["1: Não"]]
     reply_markup = t.ReplyKeyboardMarkup(decision, one_time_keyboard=True)
     context.user_data['bot'] = update.message.reply_text("Adicionar credor?", reply_markup=reply_markup)
@@ -106,7 +106,7 @@ def addDebt_1(update: t.Update, context: tex.CallbackContext):
 
 def addDebt_2(update: t.Update, context: tex.CallbackContext):
     decision = int(re.match(".+?(?=:)", update.message.text)[0])
-    purge(update, context)
+    #purge(update, context)
     
     if decision == 0:
         context.user_data['bot'] = update.message.reply_text("Entre com o nome do credor.")
@@ -118,13 +118,13 @@ def addDebt_2(update: t.Update, context: tex.CallbackContext):
 
 def addDebt_3(update: t.Update, context: tex.CallbackContext):
     context.user_data['payee'] = update.message.text
-    purge(update, context)
+    #purge(update, context)
     context.user_data['bot'] = update.message.reply_text("Entre com o valor devido.")
     return 4
 
 def addDebt_4(update: t.Update, context: tex.CallbackContext):
     context.user_data['value'] = update.message.text
-    purge(update, context)
+    #purge(update, context)
     context.user_data['bot'] = update.message.reply_text("Entre com uma descrição da dívida. (ex: Pedágio)")
     return 5
 
@@ -146,7 +146,7 @@ def addDebt_5(update: t.Update, context: tex.CallbackContext):
         context.user_data['latest'] = debt
         payments = database.dump('payments')
 
-        purge(update, context)
+        #purge(update, context)
         # vincula uma dívida a um pagamento
         # COMPORTAMENTO: se uma pessoa X deve a Y, e ambos participam de um pagamento, vincular
         # a dívida a ele faz X pagar a sua parte do pagamento E o que ele deve a Y, e Y paga sua
@@ -166,7 +166,7 @@ def addDebt_5(update: t.Update, context: tex.CallbackContext):
             unknown = payee
         text = "A dívida não foi adicionada porque "+ unknown +" não está registrado(a) no orçamento."
         update.message.reply_text(text)
-        purge(update, context)
+        #purge(update, context)
     return tex.ConversationHandler.END
 
 def updateExpenses(debt, reverse=False):
@@ -210,7 +210,7 @@ def confirmDebt(update: t.Update, context: tex.CallbackContext):
     
     update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
     database.commit('debts', debt)
-    purge(update, context)
+    #purge(update, context)
     return tex.ConversationHandler.END
 
 def updateExpenses_credit(credit, reverse=False):
@@ -232,13 +232,13 @@ def addCredit(update: t.Update, context: tex.CallbackContext):
 
 def addCredit_1(update: t.Update, context: tex.CallbackContext):
     context.user_data['person'] = update.message.text
-    purge(update, context)
+    #purge(update, context)
     context.user_data['bot'] = update.message.reply_text("Entre com o valor do crédito.")
     return 2
 
 def addCredit_2(update: t.Update, context: tex.CallbackContext):
     context.user_data['value'] = update.message.text
-    purge(update, context)
+    #purge(update, context)
     context.user_data['bot'] = update.message.reply_text("Entre com uma descrição para o crédito. (ex: Adiantou a sua parte do aluguel)")
     return 3
 
@@ -250,7 +250,7 @@ def addCredit_3(update: t.Update, context: tex.CallbackContext):
         context.user_data['latest'] = credit
         payments = database.dump('payments')
 
-        purge(update, context)
+        #purge(update, context)
         pay_keys = []
         pay_keys.append( ["(não vincular)"] )
         for p in payments:
@@ -263,7 +263,7 @@ def addCredit_3(update: t.Update, context: tex.CallbackContext):
     else:
         text = "O crédito não foi adicionado porque "+ context.user_data['person'] +" não está registrado(a) no orçamento."
         update.message.reply_text(text)
-        purge(update, context)
+        #purge(update, context)
     return tex.ConversationHandler.END
 
 def confirmCredit(update: t.Update, context: tex.CallbackContext):
@@ -279,7 +279,7 @@ def confirmCredit(update: t.Update, context: tex.CallbackContext):
     update.message.reply_text(text, reply_markup=t.ReplyKeyboardRemove())
     database.commit('credits', credit)
 
-    purge(update, context)
+    #purge(update, context)
     return tex.ConversationHandler.END
 
 def showAllPeople(update: t.Update, context: tex.CallbackContext):
@@ -372,7 +372,7 @@ def setReminder_selector(update: t.Update, context: tex.CallbackContext):
 
 def setReminder_date(update: t.Update, context: tex.CallbackContext):
     context.user_data['payment'] = update.message.text
-    purge(update, context)
+    #purge(update, context)
     context.user_data['bot'] = update.message.reply_text("Defina a data do lembrete. (dd/mm/aaaa)")
     return 2
 
@@ -388,7 +388,7 @@ def setReminder(update: t.Update, context: tex.CallbackContext):
     when = datetime(date[2], date[1], date[0], 16, 5, 0, tzinfo=pytz.utc)
 
     context.job_queue.run_once(reminderCallback, when, context=[update.message.chat_id, payment])
-    purge(update, context)
+    #purge(update, context)
     update.message.reply_text('Lembrete marcado para '+str(date[0])+'/'+str(date[1])+'/'+str(date[2]))
 
     
@@ -434,7 +434,7 @@ def deletePerson(update: t.Update, context: tex.CallbackContext):
     # del people[where]
     database.delete('people', id)
     update.message.reply_text(text)
-    purge(update, context)
+    #purge(update, context)
     return tex.ConversationHandler.END
 
 def deletePay_selector(update: t.Update, context: tex.CallbackContext):
@@ -467,7 +467,7 @@ def deletePay(update: t.Update, context: tex.CallbackContext):
     #del payments[where]
     database.delete('payments', id)
     update.message.reply_text(text)
-    purge(update, context)
+    #purge(update, context)
     return tex.ConversationHandler.END
 
 def deleteDebt_selector(update: t.Update, context: tex.CallbackContext):
@@ -498,7 +498,7 @@ def deleteDebt(update: t.Update, context: tex.CallbackContext):
     database.delete('debts', debt['_id'])
 
     update.message.reply_text(text)
-    purge(update, context)
+    #purge(update, context)
     return tex.ConversationHandler.END
 
 def deleteCredit_selector(update: t.Update, context: tex.CallbackContext):
@@ -521,7 +521,7 @@ def deleteCredit(update: t.Update, context: tex.CallbackContext):
     # del credits[where]
     database.delete('credits', credit['_id'])
     update.message.reply_text(text)
-    purge(update, context)
+    #purge(update, context)
     return tex.ConversationHandler.END
 
 def main():
