@@ -285,62 +285,74 @@ def confirmCredit(update: t.Update, context: tex.CallbackContext):
 def showAllPeople(update: t.Update, context: tex.CallbackContext):
     out = ""
     people = database.dump('people')
-    if people.count() == 0:
+    if len(people) == 0:
         out += "Não há pessoas registradas."
     else:
         for _, p in enumerate(people):
             out += str(p['_id'])+": "+p['handle']+" (ou "+p['alias']+")\n"
     update.message.reply_text(out)
 
-# Exibe todos os pagamentos atuais
-def showAllPays(update: t.Update, context: tex.CallbackContext):
-    out = ""
+def parsePayments():
+    out = "<strong>Pagamentos registrados</strong>\n\n"
     payments = database.dump('payments')
-    if payments.count() == 0:
+    if len(payments) == 0:
         out += "Não há pagamentos registrados."
     else:
         for _, p in enumerate(payments):
-            out += str(p['_id'])+": "+p['name']+" "+'{0:.2f}'.format(float(p['value']))+"\n"
+            out += "<strong>"+p['name']+"</strong>\t\t\t"+'{0:.2f}'.format(float(p['value']))+"\n"
             for e in enumerate(p['expenses']):
-                out += "\t\t\t"+str(e[1][0])+"\t\t"+'{0:.2f}'.format(float(e[1][1]))+"\n"
-    update.message.reply_text(out)
+                out += "\t\t\t\t\t\t\t\t"+str(e[1][0])+"\t\t\t\t\t"+'{0:.2f}'.format(float(e[1][1]))+"\n"
+    return out
 
-# Exibe todas as dívidas atuais
-def showAllDebts(update: t.Update, context: tex.CallbackContext):
-    out = ""
+# Exibe todos os pagamentos atuais
+def showAllPays(update: t.Update, context: tex.CallbackContext):
+    update.message.reply_html(parsePayments())
+
+def parseDebts():
+    out = "<strong>Dívidas registradas</strong>\n\n"
     debts = database.dump('debts')
-    if debts.count() == 0:
+    if len(debts) == 0:
         out += "Não há dívidas registradas."
     else:
         for _, d in enumerate(debts):
+            out += "<strong>"+d['description']+"</strong>\t\t\t"+'{0:.2f}'.format(float(d['value']))+"\n\t\t\t\t\t\t\t\t"
             for p in d['payer']:
-                out += p+" "
+                out += "<em>"+p+"</em> "
             
             if d['payee'] != None:
-                out += "-> "+d['payee']+" "
-            
-            out += "= "+'{0:.2f}'.format(float(d['value']))+"\t("+d['description']+")\n"
-    update.message.reply_text(out)
+                out += "<strong>➪ "+d['payee']+"</strong>"
 
-def showAllCredits(update: t.Update, context: tex.CallbackContext):
-    out = ""
+            out += "\n\n"
+    return out
+
+# Exibe todas as dívidas atuais
+def showAllDebts(update: t.Update, context: tex.CallbackContext):
+    update.message.reply_html(parseDebts())
+
+def parseCredits():
+    out = "<strong>Créditos registrados</strong>\n\n"
     credits = database.dump('credits')
-    if credits.count() == 0:
+    if len(credits) == 0:
         out += "Não há créditos registrados."
     else:
         for _, c in enumerate(credits):
-            out += c['person']+"\t\t-"+'{0:.2f}'.format(float(c['value']))+" ("+c['description']+")\n"
-    update.message.reply_text(out)
+            out += c['person']+"\t\t\t-"+'{0:.2f}'.format(float(c['value']))+" ("+c['description']+")\n"
+    return out
+
+def showAllCredits(update: t.Update, context: tex.CallbackContext):
+    update.message.reply_html(parseCredits())
 
 def showReport(update: t.Update, context: tex.CallbackContext):
-    out = ""
-    people = list(database.dump('people'))
+    out = "<strong>Relatório completo de dívidas</strong>\n\n"
+    out += parsePayments() + "\n" + parseDebts() + "\n" + parseCredits() + "\n"
+
+    people = database.dump('people')
     payments = database.dump('payments')
     debts = database.dump('debts')
     credits = database.dump('credits')
 
     costs = [0] * len(people)
-
+    out += "<strong>Valor total a pagar</strong>\n\n"
     for i, p in enumerate(people):
         for _, a in enumerate(payments):
             for _, e in enumerate(a['expenses']):                
@@ -358,7 +370,7 @@ def showReport(update: t.Update, context: tex.CallbackContext):
                     costs[i] -= c['value']
         
         out += people[i]['handle']+": "+'{0:.2f}'.format(float(costs[i]))+"\n"
-    update.message.reply_text(out)
+    update.message.reply_html(out)
 
 def setReminder_selector(update: t.Update, context: tex.CallbackContext):
     pay_keys = []

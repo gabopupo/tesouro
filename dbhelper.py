@@ -32,7 +32,7 @@ class DBHelper:
         return self.my_base[collection].find_one({'_id': data_id})
 
     def dump(self, collection):
-        return self.my_base[collection].find({})
+        return list(self.my_base[collection].find({}))
 
     def update(self, collection, queryID, newData):
         self.my_base[collection].update_one({'_id': queryID}, {'$set': newData}, upsert=False)
