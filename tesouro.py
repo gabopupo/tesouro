@@ -4,7 +4,6 @@ import pytz
 import telegram as t
 import telegram.ext as tex
 import logging as log
-from secrets import token
 from dbhelper import DBHelper
 from utils import toLower, purge, exists
 from pymongo import errors
@@ -13,6 +12,8 @@ from datetime import datetime
 ADD, SUB = range(1, 3)
 database = None
 os.environ['TZ'] = 'UTC'
+
+token = os.environ['TOKEN']
 
 # inicializa o bot
 def start(update: t.Update, context: tex.CallbackContext):
@@ -642,10 +643,10 @@ def main():
     )
     dispatcher.add_handler(delete_credit_handler)
 
-    # updater.start_webhook(listen="0.0.0.0", port=int(os.environ.get('PORT', '8443')), url_path=token)
-    # updater.bot.set_webhook('https://tesourobot.herokuapp.com/'+token)
-    updater.start_polling()
-    updater.idle()
+    updater.start_webhook(listen="0.0.0.0", port=int(os.environ.get('PORT', '8443')), url_path=token)
+    updater.bot.set_webhook('https://tesourobot.herokuapp.com/'+token)
+    # updater.start_polling()
+    # updater.idle()
 
 if __name__ == "__main__":
     main()

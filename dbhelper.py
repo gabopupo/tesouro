@@ -1,5 +1,7 @@
 from pymongo import MongoClient
-from secrets import mongourl
+import os
+
+mongourl = os.environ['MONGOURL']
 
 class DBHelper:
     def __init__(self, chat_id):
